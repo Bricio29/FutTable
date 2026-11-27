@@ -54,13 +54,15 @@ async function handleApi(req, res, pathname, config, fetchImpl) {
     const data = await client.add(pathname.slice('/api/'.length), await readBody(req));
     return json(res, 201, data);
   }
-  const match = pathname.match(/^\/api\/matches\/([^/]+)$/);
-  if (req.method === 'PATCH' && match) {
-    const updated = await client.updateScore(match[1], await readBody(req));
+  const record = pathname.match(/^\/api\/(teams|matches)\/([^/]+)$/);
+  if (req.method === 'PATCH' && record) {
+    const data = await readBody(req);
+    const updated = record[1] === 'teams' ? await client.updateTeam(record[2], data) : await client.updateScore(record[2], data);
     return json(res, 200, updated);
   }
-  if (req.method === 'DELETE' && match) {
-    await client.removeMatch(match[1]);
+  if (req.method === 'DELETE' && record) {
+    if (record[1] === 'teams') await client.removeTeam(record[2], await readBody(req));
+    else await client.removeMatch(record[2]);
     res.writeHead(204, { 'Cache-Control': 'no-store' });
     return res.end();
   }

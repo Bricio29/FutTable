@@ -296,7 +296,7 @@ export function Results({ league, compact, navigate, newMatch, onEdit, onRemove 
   );
 }
 
-export function Clubs({ rows, addTeam }) {
+export function Clubs({ rows, addTeam, onEdit, onRemove }) {
   const [query, setQuery] = useState('');
   const normalize = (s) =>
     s
@@ -329,6 +329,19 @@ export function Clubs({ rows, addTeam }) {
                 <p>
                   {played} {played === 1 ? 'jogo' : 'jogos'} · {points} {points === 1 ? 'ponto' : 'pontos'}
                 </p>
+              </div>
+              <div className="club-actions">
+                <button type="button" onClick={() => onEdit(team)} aria-label={'Editar ' + team.name}>
+                  <Pencil size={15} aria-hidden="true" /> Editar
+                </button>
+                <button
+                  type="button"
+                  className="remove-club"
+                  onClick={() => onRemove(team, played)}
+                  aria-label={'Excluir ' + team.name}
+                >
+                  <Trash2 size={15} aria-hidden="true" /> Excluir
+                </button>
               </div>
             </article>
           ))}

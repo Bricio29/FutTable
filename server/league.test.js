@@ -200,3 +200,61 @@ test('correção requer placares válidos tanto na versão original quanto na no
     assert.equal((await patchScore(handler, { ...correction, [field]: -1 })).status, 400);
   }
 });
+
+const teamEdit = {
+  name: 'Clube do Sol', code: 'SOL', color: '#F0C118',
+  previous_name: 'Aurora & Cia, "A+B"', previous_code: club.code, previous_color: club.color,
+};
+
+function manageTeam(handler, method, data) {
+  return call(handler, '/api/teams/' + club.id, { method, body: JSON.stringify(data) });
+}
+
+test('edição atualiza os campos permitidos e trata o nome anterior como um único filtro', async () => {
+  const updated = { id: club.id, name: teamEdit.name, code: teamEdit.code, color: teamEdit.color };
+  const handler = createHandler({ env, fetchImpl: async (url, options) => {
+    const query = new URL(url).searchParams;
+    assert.equal(options.method, 'PATCH');
+    assert.equal(options.headers.Authorization, headers.authorization);
+    assert.equal(query.get('id'), 'eq.' + club.id);
+    for (const field of ['name', 'code', 'color']) assert.equal(query.get(field), 'eq.' + teamEdit['previous_' + field]);
+    assert.deepEqual(JSON.parse(options.body), { name: updated.name, code: updated.code, color: updated.color });
+    return Response.json([updated]);
+  } });
+  const response = await manageTeam(handler, 'PATCH', { ...teamEdit, name: 'Clube  do Sol', code: 'sol', owner_id: 'outro' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, updated);
+});
+
+test('edição detecta cadastro removido, concorrente, duplicado e repetição após perda de resposta', async () => {
+  const saved = { id: club.id, name: teamEdit.name, code: teamEdit.code, color: teamEdit.color };
+  for (const [rows, status] of [[[], 404], [[club], 409], [[saved], 200]]) {
+    const handler = createHandler({ env, fetchImpl: async (_, options) => Response.json(options.method === 'PATCH' ? [] : rows) });
+    assert.equal((await manageTeam(handler, 'PATCH', teamEdit)).status, status);
+  }
+  const duplicate = createHandler({ env, fetchImpl: async () => Response.json({ code: '23505' }, { status: 409 }) });
+  assert.equal((await manageTeam(duplicate, 'PATCH', teamEdit)).status, 409);
+});
+
+test('exclusão atômica exige contagem confirmada, aceita repetição e reporta conflito', async () => {
+  for (const [result, status] of [['removed', 204], ['absent', 204], ['conflict', 409]]) {
+    const handler = createHandler({ env, fetchImpl: async (url, options) => {
+      assert.equal(new URL(url).pathname, '/rest/v1/rpc/futtable_remove_team');
+      assert.equal(options.method, 'POST');
+      assert.equal(options.headers.Authorization, headers.authorization);
+      assert.deepEqual(JSON.parse(options.body), { team_id: club.id, expected_matches: 3 });
+      return Response.json(result);
+    } });
+    assert.equal((await manageTeam(handler, 'DELETE', { match_count: 3 })).status, status);
+  }
+});
+
+test('edição e exclusão validam a entrada antes de acessar o banco', async () => {
+  const handler = createHandler({ env, fetchImpl: offline });
+  for (const field of Object.keys(teamEdit)) {
+    assert.equal((await manageTeam(handler, 'PATCH', { ...teamEdit, [field]: '' })).status, 400);
+  }
+  for (const match_count of [null, undefined, -1, 0.5, '0']) {
+    assert.equal((await manageTeam(handler, 'DELETE', { match_count })).status, 400);
+  }
+});

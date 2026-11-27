@@ -1,40 +1,3 @@
-const clubs = [
-  ['Aurora FC', 'AUR', '#166D54'],
-  ['Atlético Serrano', 'SER', '#475CB0'],
-  ['Estrela do Norte', 'EST', '#AB3F53'],
-  ['União do Vale', 'UDV', '#9058AF'],
-  ['Real Litoral', 'LIT', '#167DA1'],
-  ['Vila Operária', 'VOP', '#C36427'],
-  ['Ferroviário Sul', 'FER', '#394757'],
-  ['Porto Verde', 'PTV', '#69833C'],
-];
-
-function fixtureId(group, index) {
-  return `00000000-0000-4000-800${group}-${String(index + 1).padStart(12, '0')}`;
-}
-
-const teams = clubs.map(([name, code, color], index) => ({ id: fixtureId(1, index), name, code, color }));
-
-const rounds = [
-  ['2026-11-01', [[0, 7, 3, 0], [1, 6, 2, 0], [2, 5, 1, 1], [3, 4, 2, 1]]],
-  ['2026-11-08', [[6, 0, 1, 2], [5, 7, 2, 0], [4, 1, 1, 1], [3, 2, 0, 2]]],
-  ['2026-11-15', [[0, 5, 1, 1], [6, 4, 2, 3], [7, 3, 1, 2], [1, 2, 2, 1]]],
-  ['2026-11-22', [[4, 0, 0, 3], [3, 5, 1, 1], [2, 6, 2, 0], [1, 7, 3, 1]]],
-];
-
-const matches = rounds.flatMap(([played_on, fixtures], roundIndex) =>
-  fixtures.map(([home, away, home_score, away_score], index) => ({
-    id: fixtureId(2, roundIndex * 4 + index),
-    home_id: teams[home].id,
-    away_id: teams[away].id,
-    home_score,
-    away_score,
-    played_on,
-  })),
-);
-
-export const demoLeague = { teams, matches };
-
 function countResult(row, scored, conceded) {
   row.played++;
   row.gf += scored;
@@ -95,6 +58,16 @@ export function prepareTeam(input) {
   if (!/^[A-Z0-9]{2,4}$/.test(code)) throw new Error('Use de 2 a 4 letras ou números na sigla.');
   if (typeof input.color !== 'string' || !/^#[\da-f]{6}$/i.test(input.color)) throw new Error('Escolha uma cor válida para o clube.');
   return { id: recordId(input.id), name, code, color: input.color };
+}
+
+export function replaceTeam(league, team) {
+  return { ...league, teams: league.teams.map(row => row.id === team.id ? team : row) };
+}
+
+export function withoutTeam(league, id) {
+  if (!league.teams.some(team => team.id === id)) return league;
+  const matches = league.matches.filter(match => match.home_id !== id && match.away_id !== id);
+  return { teams: league.teams.filter(team => team.id !== id), matches };
 }
 
 function score(value) {

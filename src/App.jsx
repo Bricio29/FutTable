@@ -13,7 +13,7 @@ import {
   Trophy,
   UserRound,
 } from 'lucide-react';
-import { AuthDialog, useAuth } from './auth.jsx';
+import { AuthDialog, AuthScreen, useAuth } from './auth.jsx';
 import { standings } from './league.js';
 import { useLeague } from './useLeague.js';
 import { Clubs, Rankings, Results } from './LeagueViews.jsx';
@@ -69,8 +69,8 @@ function Metrics({ league }) {
   );
 }
 
-function Dashboard({ auth, page, navigate }) {
-  const model = useLeague(auth.ready ? (auth.session?.access_token ?? null) : undefined);
+function Dashboard({ token, page, navigate }) {
+  const model = useLeague(token);
   const [dialog, setDialog] = useState(null);
   const [toast, setToast] = useState('');
   const overview = page === 'geral';
@@ -83,10 +83,10 @@ function Dashboard({ auth, page, navigate }) {
       return () => clearTimeout(timer);
     }
   }, [toast]);
-  const addingClub = page === 'clubes' || (!loading && !error && !league.teams.length);
+  const addingClub = page === 'clubes' || (!loading && !error && league.teams.length < 2);
   const newMatch = () => setDialog({ type: 'match' });
   const addTeam = () => setDialog({ type: 'club' });
-  const title = auth.session ? 'Minha liga' : 'Liga Nacional';
+  const title = 'Minha liga';
   return (
     <main id="conteudo" tabIndex={-1} className="shell main">
       <div className="context-line">
@@ -96,9 +96,9 @@ function Dashboard({ auth, page, navigate }) {
           <ChevronRight size={13} />
           <strong>{label}</strong>
         </div>
-        <span className="demo-status">
+        <span className="league-status">
           <i />
-          {!auth.ready ? 'Carregando' : auth.session ? 'Liga privada' : 'Demonstração local'}
+          Liga privada
         </span>
       </div>
       {overview ? (
@@ -123,7 +123,7 @@ function Dashboard({ auth, page, navigate }) {
               <i />
               <span>
                 <Flag />
-                {auth.session ? 'Campeonato particular' : 'Temporada 2026'}
+                Campeonato particular
               </span>
             </div>
             <button
@@ -155,11 +155,6 @@ function Dashboard({ auth, page, navigate }) {
           </button>
         </div>
       )}
-      {auth.error && (
-        <p role="alert" className="load-warning">
-          {auth.error} A demonstração está disponível neste navegador.
-        </p>
-      )}
       {loading ? (
         <div className="panel loading" role="status">
           Carregando a liga…
@@ -188,7 +183,14 @@ function Dashboard({ auth, page, navigate }) {
                 onRemove={(match) => setDialog({ type: 'remove', match })}
               />
             )}
-            {page === 'clubes' && <Clubs rows={rows} addTeam={addTeam} />}
+            {page === 'clubes' && (
+              <Clubs
+                rows={rows}
+                addTeam={addTeam}
+                onEdit={(team) => setDialog({ type: 'editClub', team })}
+                onRemove={(team, matchCount) => setDialog({ type: 'removeClub', team, matchCount })}
+              />
+            )}
           </div>
         </>
       )}
@@ -215,10 +217,9 @@ function Dashboard({ auth, page, navigate }) {
   );
 }
 
-export default function App() {
+function PrivateLeague({ auth }) {
   const [page, setPage] = useState(pageFromUrl);
   const [authOpen, setAuthOpen] = useState(false);
-  const auth = useAuth();
   useEffect(() => {
     const onHash = () => setPage(pageFromUrl());
     window.addEventListener('hashchange', onHash);
@@ -257,11 +258,11 @@ export default function App() {
           </nav>
           <button className="account-button" onClick={() => setAuthOpen(true)}>
             <UserRound size={16} />
-            {auth.session ? 'Minha conta' : 'Entrar'}
+            Minha conta
           </button>
         </div>
       </header>
-      <Dashboard key={auth.session?.user.id || 'demo'} auth={auth} page={page} navigate={navigate} />
+      <Dashboard token={auth.session.access_token} page={page} navigate={navigate} />
       <footer className="shell footer">
         <a aria-label="FutTable, início" href="#/geral">
           <Brand />
@@ -271,4 +272,12 @@ export default function App() {
       <AuthDialog auth={auth} open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );
+}
+
+export default function App() {
+  const auth = useAuth();
+  if (!auth.ready || !auth.session?.access_token || auth.recovery || auth.linkError) {
+    return <AuthScreen auth={auth} />;
+  }
+  return <PrivateLeague key={auth.session.user.id} auth={auth} />;
 }

@@ -178,7 +178,7 @@ a svg {
   font-weight: 600;
   color: #314b3b;
 }
-.demo-status {
+.league-status {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -191,7 +191,7 @@ a svg {
   padding: 5px 10px;
   white-space: nowrap;
 }
-.demo-status i,
+.league-status i,
 .game-meta i {
   width: 6px;
   height: 6px;
@@ -762,7 +762,8 @@ tbody .rank-cell span {
 .club-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 255px), 1fr));
 }
-.game-actions {
+.game-actions,
+.club-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -770,7 +771,8 @@ tbody .rank-cell span {
   border-top: 1px solid var(--line);
   padding-top: 6px;
 }
-.game-actions button {
+.game-actions button,
+.club-actions button {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -822,10 +824,19 @@ tbody .rank-cell span {
 .club-card {
   border: 1px solid var(--line);
   padding: 17px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
+  column-gap: 14px;
   border-radius: 9px;
+}
+.club-actions {
+  grid-column: 1 / -1;
+  align-self: end;
+}
+.club-actions button {
+  min-height: 30px;
+  font-size: 12px;
 }
 .club-card .crest {
   width: 39px;
@@ -1120,7 +1131,7 @@ tbody .rank-cell span {
     gap: 5px;
     font-size: 11px;
   }
-  .demo-status {
+  .league-status {
     font-size: 10px;
     padding: 4px 7px;
   }
@@ -1231,10 +1242,12 @@ tbody .rank-cell span {
   }
 }
 
-.game-actions button.remove-game {
+.game-actions button.remove-game,
+.club-actions button.remove-club {
   color: #7b4741;
 }
-.game-actions button:hover {
+.game-actions button:hover,
+.club-actions button:hover {
   text-decoration: underline;
 }
 .edit-scores {

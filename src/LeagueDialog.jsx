@@ -1,7 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 
-const colors = ['#166D54', '#475CB0', '#AB3F53', '#9058AF', '#167DA1', '#C36427', '#394757', '#69833C'];
+const colors = [
+  ['#166D54', 'Verde'],
+  ['#475CB0', 'Azul'],
+  ['#AB3F53', 'Vermelho'],
+  ['#9058AF', 'Roxo'],
+  ['#167DA1', 'Turquesa'],
+  ['#C36427', 'Laranja'],
+  ['#394757', 'Grafite'],
+  ['#69833C', 'Oliva'],
+];
 const today = () => {
   const d = new Date();
   return [
@@ -11,19 +20,38 @@ const today = () => {
   ].join('-');
 };
 
-export default function LeagueDialog({ type, match, model, onClose, onFinish, onAddTeam }) {
+export default function LeagueDialog({ type, match, team, matchCount, model, onClose, onFinish, onAddTeam }) {
   const ref = useRef(null);
   const submitLock = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [stale, setStale] = useState(false);
+  const [conflictStatus, setConflictStatus] = useState(null);
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
-  const [color, setColor] = useState(colors[0]);
+  const [color, setColor] = useState(team?.color ?? colors[0][0]);
   const [recordId] = useState(() => globalThis.crypto?.randomUUID?.());
   const { teams } = model.league;
+  const clubForm = type === 'club' || type === 'editClub';
+  const deleting = type === 'remove' || type === 'removeClub';
+  const choices =
+    team && !colors.some(([hex]) => hex === team.color.toUpperCase())
+      ? [...colors, [team.color, 'Cor atual ' + team.color]]
+      : colors;
+  const currentTeam = team && teams.find((item) => item.id === team.id);
+  const teamChanged =
+    team &&
+    (!currentTeam ||
+      currentTeam.name !== team.name ||
+      currentTeam.code !== team.code ||
+      currentTeam.color !== team.color);
+  const affectsExistingRecord = type === 'edit' || type === 'editClub' || type === 'removeClub';
+  const stale =
+    affectsExistingRecord &&
+    (conflictStatus === 404 || (conflictStatus === 409 && (type !== 'editClub' || teamChanged)));
   const title = {
     club: 'Cadastrar clube',
+    editClub: 'Editar clube',
+    removeClub: 'Excluir clube?',
     match: 'Registrar partida',
     edit: 'Corrigir placar',
     remove: 'Excluir partida?',
@@ -42,19 +70,23 @@ export default function LeagueDialog({ type, match, model, onClose, onFinish, on
     setError('');
     try {
       if (type === 'club') await model.addTeam({ ...fields, color, id: recordId });
+      if (type === 'editClub') await model.updateTeam(team, { name: fields.name, code: fields.code, color });
+      if (type === 'removeClub') await model.removeTeam(team, matchCount);
       if (type === 'match') await model.addMatch({ ...fields, home_id: home, away_id: away, id: recordId });
       if (type === 'edit') await model.updateScore(match, fields.home_score, fields.away_score);
       if (type === 'remove') await model.removeMatch(match.id);
       onFinish(
         {
           club: 'Clube cadastrado.',
+          editClub: 'Clube atualizado.',
+          removeClub: 'Clube excluído.',
           match: 'Resultado registrado.',
           edit: 'Placar atualizado.',
           remove: 'Partida excluída.',
         }[type],
       );
     } catch (err) {
-      setStale(type === 'edit' && (err.status === 409 || err.status === 404));
+      setConflictStatus(err.status);
       setError(err.message || 'Falha ao salvar. Tente novamente.');
     } finally {
       submitLock.current = false;
@@ -90,12 +122,13 @@ export default function LeagueDialog({ type, match, model, onClose, onFinish, on
         </div>
       ) : (
         <form className="dialog-form" onSubmit={submit}>
-          {type === 'club' && (
+          {clubForm && (
             <>
               <label>
                 Nome do clube
                 <input
                   name="name"
+                  defaultValue={team?.name}
                   placeholder="Ex. União do Vale"
                   minLength={2}
                   maxLength={60}
@@ -107,6 +140,7 @@ export default function LeagueDialog({ type, match, model, onClose, onFinish, on
                 Sigla
                 <input
                   name="code"
+                  defaultValue={team?.code}
                   placeholder="UDV"
                   pattern="[A-Za-z0-9]{2,4}"
                   minLength={2}
@@ -118,16 +152,14 @@ export default function LeagueDialog({ type, match, model, onClose, onFinish, on
               <fieldset>
                 <legend>Cor do escudo</legend>
                 <div className="color-choices">
-                  {colors.map((c, i) => (
+                  {choices.map(([c, label]) => (
                     <label key={c} style={{ '--club': c }}>
                       <input
                         type="radio"
                         name="chosenColor"
-                        checked={color === c}
+                        checked={color.toUpperCase() === c.toUpperCase()}
                         onChange={() => setColor(c)}
-                        aria-label={
-                          ['Verde', 'Azul', 'Vermelho', 'Roxo', 'Turquesa', 'Laranja', 'Grafite', 'Oliva'][i]
-                        }
+                        aria-label={label}
                       />
                       <span />
                     </label>
@@ -212,22 +244,41 @@ export default function LeagueDialog({ type, match, model, onClose, onFinish, on
               ? A classificação será recalculada.
             </p>
           )}
+          {type === 'removeClub' && (
+            <p>
+              <strong>{team.name}</strong> será excluído da liga.{' '}
+              {matchCount === 0
+                ? 'O clube tem 0 partidas registradas.'
+                : matchCount === 1
+                  ? '1 partida desse clube também será excluída.'
+                  : 'As ' + matchCount + ' partidas desse clube também serão excluídas.'}{' '}
+              A classificação será recalculada.
+            </p>
+          )}
           {error && (
             <p role="alert" className="error-message">
               {error}
             </p>
           )}
-          {stale && <p>Volte ao histórico para conferir a versão mais recente da partida.</p>}
+          {stale && (
+            <p>
+              {team
+                ? 'Volte à lista de clubes para conferir os dados atuais.'
+                : 'Volte ao histórico para conferir a versão mais recente da partida.'}
+            </p>
+          )}
           <div className="dialog-actions">
             <button type="button" className="secondary" onClick={onClose} disabled={busy}>
-              {stale ? 'Voltar ao histórico' : 'Cancelar'}
+              {stale ? (team ? 'Voltar aos clubes' : 'Voltar ao histórico') : 'Cancelar'}
             </button>
             {!stale && (
-              <button type="submit" disabled={busy} className={type === 'remove' ? 'danger' : 'primary'}>
+              <button type="submit" disabled={busy} className={deleting ? 'danger' : 'primary'}>
                 {busy
                   ? 'Salvando…'
                   : {
                       club: 'Salvar clube',
+                      editClub: 'Salvar alterações',
+                      removeClub: 'Excluir clube',
                       match: 'Salvar resultado',
                       edit: 'Salvar placar',
                       remove: 'Excluir partida',

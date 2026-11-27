@@ -1,4 +1,4 @@
--- Executar no SQL Editor de um projeto de teste após aplicar a migration.
+-- Executar no SQL Editor de um projeto de teste após aplicar as migrations.
 -- A transação usa contas temporárias, geradas a cada execução.
 begin;
 
@@ -30,6 +30,14 @@ begin
     raise exception 'A segunda conta conseguiu ler dados da primeira';
   end if;
 
+  update public.teams set name = 'Visitante';
+  if found then
+    raise exception 'A segunda conta conseguiu editar clubes da primeira';
+  end if;
+  if public.futtable_remove_team('00000000-0000-4000-8000-000000000001', 1) <> 'absent' then
+    raise exception 'A segunda conta conseguiu acessar o clube da primeira';
+  end if;
+
   update public.matches set home_score = 4;
   if found then
     raise exception 'A segunda conta conseguiu corrigir partidas da primeira';
@@ -59,6 +67,11 @@ begin
   exception when foreign_key_violation then
     null;
   end;
+  -- Os mesmos UUIDs podem existir em ligas diferentes.
+  insert into public.teams (id, name, code, color) values
+    ('00000000-0000-4000-8000-000000000001', 'Preto', 'PR', '#111111');
+  insert into public.matches (home_id, away_id, home_score, away_score, played_on) values
+    ('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', 0, 0, current_date);
 end;
 $$;
 
@@ -85,6 +98,44 @@ begin
   exception when insufficient_privilege then
     null;
   end;
+  update public.teams set name = 'Clube Azul', code = 'CAB', color = '#0011FF'
+    where id = '00000000-0000-4000-8000-000000000001';
+  if not found then
+    raise exception 'O proprietário não conseguiu editar o clube';
+  end if;
+  begin
+    update public.teams set owner_id = current_setting('futtable_test.account_b')::uuid;
+    raise exception 'O proprietário conseguiu transferir um clube';
+  exception when insufficient_privilege then
+    null;
+  end;
+  insert into public.teams (id, name, code, color) values
+    ('00000000-0000-4000-8000-000000000005', 'Branco', 'BC', '#FFFFFF');
+  insert into public.matches (home_id, away_id, home_score, away_score, played_on) values
+    ('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000001', 1, 1, current_date),
+    ('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000002', 2, 0, current_date);
+  if public.futtable_remove_team('00000000-0000-4000-8000-000000000001', 1) <> 'conflict'
+      or (select count(*) from public.matches) <> 3 then
+    raise exception 'Uma confirmação desatualizada removeu partidas';
+  end if;
+  if public.futtable_remove_team('00000000-0000-4000-8000-000000000001', 2) <> 'removed' then
+    raise exception 'O clube não foi removido';
+  end if;
+  if (select count(*) from public.matches) <> 1 or (select count(*) from public.teams) <> 2 then
+    raise exception 'A exclusão não preservou somente os clubes e partidas restantes';
+  end if;
+  if public.futtable_remove_team('00000000-0000-4000-8000-000000000001', 2) <> 'absent' then
+    raise exception 'A repetição de uma exclusão não foi idempotente';
+  end if;
+end;
+$$;
+
+select set_config('request.jwt.claim.sub', current_setting('futtable_test.account_b'), true);
+do $$
+begin
+  if (select count(*) from public.matches) <> 1 or (select count(*) from public.teams) <> 2 then
+    raise exception 'A exclusão em cascata alterou outra liga';
+  end if;
 end;
 $$;
 
@@ -94,6 +145,12 @@ begin
   begin
     perform public.futtable_league();
     raise exception 'O papel público conseguiu consultar o campeonato';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.futtable_remove_team('00000000-0000-4000-8000-000000000001', 0);
+    raise exception 'O papel público conseguiu executar a exclusão de clube';
   exception when insufficient_privilege then
     null;
   end;

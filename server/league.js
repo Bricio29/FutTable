@@ -24,26 +24,27 @@ function validateScores(...scores) {
   }
 }
 
+function teamFields(name, code, color) {
+  name = typeof name === 'string' ? name.trim().replace(/\s+/gu, ' ') : '';
+  code = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if ([...name].length < 2 || [...name].length > 60 || /[\u0000-\u001f\u007f]/u.test(name)) {
+    throw new HttpError(400, 'O nome do clube precisa ter entre 2 e 60 caracteres.');
+  }
+  if (!/^[A-Z0-9]{2,4}$/.test(code)) {
+    throw new HttpError(400, 'Use de 2 a 4 letras ou números para a sigla.');
+  }
+  if (typeof color !== 'string' || !/^#[a-f\d]{6}$/i.test(color)) {
+    throw new HttpError(400, 'Escolha uma cor válida para o clube.');
+  }
+  return { name, code, color };
+}
+
 export function validateRecord(table, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new HttpError(400, 'Envie os dados em um objeto JSON.');
   }
   const id = uuid(data.id);
-  if (table === 'teams') {
-    const name = typeof data.name === 'string' ? data.name.trim().replace(/\s+/gu, ' ') : '';
-    const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : '';
-    if ([...name].length < 2 || [...name].length > 60 || /[\u0000-\u001f\u007f]/u.test(name)) {
-      throw new HttpError(400, 'O nome do clube precisa ter entre 2 e 60 caracteres.');
-    }
-    if (!/^[A-Z0-9]{2,4}$/.test(code)) {
-      throw new HttpError(400, 'Use de 2 a 4 letras ou números para a sigla.');
-    }
-    if (typeof data.color !== 'string' || !/^#[a-f\d]{6}$/i.test(data.color)) {
-      throw new HttpError(400, 'Escolha uma cor válida para o clube.');
-    }
-    return { id, name, code, color: data.color };
-  }
-
+  if (table === 'teams') return { id, ...teamFields(data.name, data.code, data.color) };
   const home_id = uuid(data.home_id);
   const away_id = uuid(data.away_id);
   if (home_id === away_id) throw new HttpError(400, 'Escolha dois clubes diferentes.');
@@ -130,6 +131,23 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
     throw new HttpError(502, 'O Supabase não conseguiu concluir a operação. Verifique a configuração da liga.');
   }
 
+  // A condição no PATCH protege contra alterações simultâneas. A leitura extra
+  // distingue uma tentativa repetida de um registro removido ou já modificado.
+  async function update(table, id, previous, fields) {
+    const path = table + '?select=' + columns[table] + '&id=eq.' + uuid(id);
+    const conditions = new URLSearchParams();
+    for (const [name, value] of Object.entries(previous)) conditions.set(name, 'eq.' + value);
+    const [updated] = await request(path + '&' + conditions, 'PATCH', fields);
+    if (updated) return updated;
+
+    const [current] = await request(path);
+    if (!current) throw new HttpError(404, table === 'teams' ? 'Clube não encontrado.' : 'Partida não encontrada.');
+    if (Object.keys(fields).every(field => current[field] === fields[field])) return current;
+    throw new HttpError(409, table === 'teams'
+      ? 'O clube mudou. Confira os dados atuais antes de editar.'
+      : 'O placar mudou. Atualize a partida antes de corrigir o resultado.');
+  }
+
   return {
     getLeague: () => request('rpc/futtable_league', 'POST', {}),
     async add(table, data) {
@@ -148,18 +166,23 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
         throw error;
       }
     },
-    async updateScore(id, data) {
-      const path = 'matches?select=' + columns.matches + '&id=eq.' + uuid(id);
+    updateScore(id, data) {
       const { home_score, away_score, previous_home_score, previous_away_score } = data ?? {};
       validateScores(home_score, away_score, previous_home_score, previous_away_score);
-      const filter = '&home_score=eq.' + previous_home_score + '&away_score=eq.' + previous_away_score;
-      const [updated] = await request(path + filter, 'PATCH', { home_score, away_score });
-      if (updated) return updated;
-
-      const [current] = await request(path);
-      if (!current) throw new HttpError(404, 'Partida não encontrada.');
-      if (current.home_score === home_score && current.away_score === away_score) return current;
-      throw new HttpError(409, 'O placar mudou. Atualize a partida antes de corrigir o resultado.');
+      return update('matches', id, { home_score: previous_home_score, away_score: previous_away_score }, { home_score, away_score });
+    },
+    updateTeam(id, data) {
+      const { name, code, color, previous_name, previous_code, previous_color } = data ?? {};
+      return update('teams', id, teamFields(previous_name, previous_code, previous_color), teamFields(name, code, color));
+    },
+    async removeTeam(id, data) {
+      const matchCount = data?.match_count;
+      if (!Number.isSafeInteger(matchCount) || matchCount < 0) {
+        throw new HttpError(400, 'Confirme a quantidade de partidas vinculadas ao clube.');
+      }
+      const result = await request('rpc/futtable_remove_team', 'POST', { team_id: uuid(id), expected_matches: matchCount });
+      if (result === 'conflict') throw new HttpError(409, 'As partidas deste clube mudaram. Confira a quantidade antes de excluir.');
+      if (result !== 'removed' && result !== 'absent') throw new HttpError(502, 'Não foi possível confirmar a exclusão do clube.');
     },
     removeMatch: id => request('matches?select=id&id=eq.' + uuid(id), 'DELETE'),
   };
