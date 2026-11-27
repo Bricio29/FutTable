@@ -26,7 +26,7 @@ do $$
 declare
   removed integer;
 begin
-  if public.futtable_league() <> '{"teams":[],"matches":[],"draws":[]}'::jsonb then
+  if public.futtable_league() - 'league_id' - 'league_name' <> '{"teams":[],"matches":[],"draws":[]}'::jsonb then
     raise exception 'A segunda conta conseguiu ler dados da primeira';
   end if;
 
@@ -50,7 +50,7 @@ begin
   end if;
 
   begin
-    insert into public.teams (owner_id, name, code, color) values
+    insert into public.teams (league_id, name, code, color) values
       (current_setting('futtable_test.account_a')::uuid, 'Intruso', 'IN', '#666666');
     raise exception 'O chamador forjou o proprietário do clube';
   exception when insufficient_privilege then
@@ -104,7 +104,7 @@ begin
     raise exception 'O proprietário não conseguiu editar o clube';
   end if;
   begin
-    update public.teams set owner_id = current_setting('futtable_test.account_b')::uuid;
+    update public.teams set league_id = current_setting('futtable_test.account_b')::uuid;
     raise exception 'O proprietário conseguiu transferir um clube';
   exception when insufficient_privilege then
     null;

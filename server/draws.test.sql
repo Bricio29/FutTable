@@ -1,4 +1,4 @@
--- Executar após as três migrações no banco de teste. Rollback inclui as duas contas.
+-- Executar após as migrações no banco de teste. Rollback inclui as duas contas.
 begin;
 select set_config('draw_test.a', gen_random_uuid()::text, true),
        set_config('draw_test.b', gen_random_uuid()::text, true),
@@ -130,7 +130,7 @@ declare
   round_id uuid := current_setting('draw_test.round')::uuid;
   player_club uuid;
 begin
-  if public.futtable_league() <> '{"teams":[],"matches":[],"draws":[]}'::jsonb then raise exception 'Rodada de outra conta visível'; end if;
+  if public.futtable_league() - 'league_id' - 'league_name' <> '{"teams":[],"matches":[],"draws":[]}'::jsonb then raise exception 'Rodada de outra conta visível'; end if;
   begin
     perform public.futtable_draw(round_id);
     raise exception 'Recuperou sorteio de outra conta ou criou rodada vazia';

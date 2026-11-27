@@ -18,14 +18,6 @@ function categoryOf(club) {
   return club.name.endsWith('(W)') ? 'Feminina' : 'Masculina';
 }
 
-function Rating({ value }) {
-  return (
-    <span className="catalog-rating" aria-label={'Nota ' + value}>
-      {value}
-    </span>
-  );
-}
-
 export default function ClubFields({ team, teams }) {
   const originalClub = getCatalogClub(team?.catalog_id);
   const [mode, setMode] = useState(team && !originalClub ? 'custom' : 'catalog');
@@ -101,7 +93,7 @@ export default function ClubFields({ team, teams }) {
               </div>
               <ul className="catalog-options" aria-label="Clubes do catálogo">
                 {options.map((club) => {
-                  const taken = otherTeams.some(
+                  const registeredTeam = otherTeams.find(
                     (other) =>
                       other.catalog_id === club.id ||
                       normalizeSearch(other.name) === normalizeSearch(club.name),
@@ -111,16 +103,19 @@ export default function ClubFields({ team, teams }) {
                       <button
                         type="button"
                         className="catalog-option"
-                        disabled={taken}
+                        disabled={Boolean(registeredTeam)}
                         aria-pressed={selectedId === club.id}
                         onClick={() => choose(club)}
                       >
                         <Crest team={club} catalogClub={club} />
                         <span>
                           {club.name}
-                          {taken && <small>Já cadastrado</small>}
+                          {registeredTeam && (
+                            <small>
+                              {registeredTeam.player_name ? 'Jogador · ' + registeredTeam.player_name : 'Já cadastrado'}
+                            </small>
+                          )}
                         </span>
-                        <Rating value={club.rating} />
                       </button>
                     </li>
                   );
@@ -137,7 +132,6 @@ export default function ClubFields({ team, teams }) {
                   {categoryOf(selected)} · {selected.code}
                 </small>
               </div>
-              <Rating value={selected.rating} />
               <button type="button" className="text-button" onClick={() => setChoosing(true)}>
                 Trocar
               </button>

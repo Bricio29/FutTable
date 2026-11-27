@@ -18,6 +18,7 @@ ENV NODE_ENV=production \
 COPY --from=build /app/package.json ./
 COPY --from=build /app/dist/ ./dist/
 COPY --from=build /app/server/index.js /app/server/league.js ./server/
+COPY --from=build /app/src/clubCatalog.js ./src/
 
 USER node
 EXPOSE 3001

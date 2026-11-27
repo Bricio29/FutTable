@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { createHandler } from './index.js';
 import { validateRecord } from './league.js';
+import { clubCatalog } from '../src/clubCatalog.js';
 
 const env = { SUPABASE_URL: 'https://liga.example', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_teste' };
 const headers = { authorization: 'Bearer token-da-conta', 'content-type': 'application/json' };
@@ -323,4 +324,38 @@ test('preserva conflitos de participantes e rodadas devolvidos pelo banco', asyn
   const response = await call(handler, '/api/draws', { method: 'POST', body: JSON.stringify({ id: fixture.id }) });
   assert.equal(response.status, 409);
   assert.equal(response.body.error, message);
+});
+
+test('sorteia os clubes no banco em uma única operação autenticada para até 50 jogadores', async () => {
+  const catalog_ids = clubCatalog.map(club => club.id);
+  const player_names = catalog_ids.map((_, index) => 'Jogador ' + (index + 1));
+  const result = { teams: [{ ...club, catalog_id: 'real-madrid', player_name: 'Jogador 1' }] };
+  const handler = createHandler({ env, fetchImpl: async (url, options) => {
+    assert.equal(new URL(url).pathname, '/rest/v1/rpc/futtable_club_draw');
+    assert.equal(options.headers.Authorization, headers.authorization);
+    assert.deepEqual(JSON.parse(options.body), { request_id: fixture.id, player_names, catalog_ids });
+    return Response.json(result);
+  } });
+  const body = { id: fixture.id, player_names: player_names.map(name => '  ' + name.replace(' ', '  ')), catalog_ids, owner_id: 'outro' };
+  const response = await call(handler, '/api/club-draws', { method: 'POST', body: JSON.stringify(body) });
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.body, result);
+});
+
+test('sorteio de clubes valida a quantidade, os nomes e o catálogo antes da RPC', async () => {
+  const handler = createHandler({ env, fetchImpl: offline });
+  const valid = { id: fixture.id, player_names: ['Ana', 'Bia'], catalog_ids: ['real-madrid', 'arsenal'] };
+  for (const invalid of [
+    { id: null }, { player_names: ['Ana'] }, { player_names: ['Ana', ' aNA '] }, { player_names: ['Ana', '  '] },
+    { player_names: ['Ana', 1] }, { player_names: ['Ana', 'x'.repeat(61)] }, { player_names: null },
+    { catalog_ids: ['real-madrid'] }, { catalog_ids: ['arsenal', 'arsenal'] }, { catalog_ids: ['real-madrid', 'desconhecido'] },
+    { player_names: Array(51).fill('Ana'), catalog_ids: Array(51).fill('arsenal') },
+  ]) {
+    const response = await call(handler, '/api/club-draws', { method: 'POST', body: JSON.stringify({ ...valid, ...invalid }) });
+    assert.equal(response.status, 400, JSON.stringify(invalid));
+  }
+  const conflict = createHandler({ env, fetchImpl: async () => Response.json({ code: 'PT409', message: 'Confira o vínculo.' }, { status: 409 }) });
+  const response = await call(conflict, '/api/club-draws', { method: 'POST', body: JSON.stringify(valid) });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error, 'Confira o vínculo.');
 });

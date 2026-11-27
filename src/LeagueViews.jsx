@@ -328,38 +328,32 @@ export function Clubs({ rows, matches, addTeam, onEdit, onRemove }) {
       </div>
       {clubs.length ? (
         <div className="club-grid">
-          {clubs.map(({ team, points, played }) => {
-            const catalogClub = catalogClubForTeam(team);
-            return (
-              <article className="club-card" key={team.id}>
-                <Crest team={team} catalogClub={catalogClub} />
-                <div>
-                  <div className="club-meta">
-                    <small>{team.code}</small>
-                    {catalogClub && <span className="catalog-rating" aria-label={'Nota ' + catalogClub.rating}>{catalogClub.rating}</span>}
-                  </div>
-                  <h3>{team.name}</h3>
-                  {team.player_name && <p className="club-player">Jogador · {team.player_name}</p>}
-                  <p>
-                    {played} {played === 1 ? 'jogo' : 'jogos'} · {points} {points === 1 ? 'ponto' : 'pontos'}
-                  </p>
-                </div>
-                <div className="club-actions">
-                  <button type="button" onClick={() => onEdit(team)} aria-label={'Editar ' + team.name}>
-                    <Pencil size={15} aria-hidden="true" /> Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="remove-club"
-                    onClick={() => confirmRemove(team)}
-                    aria-label={'Excluir ' + team.name}
-                  >
-                    <Trash2 size={15} aria-hidden="true" /> Excluir
-                  </button>
-                </div>
-              </article>
-            );
-          })}
+          {clubs.map(({ team, points, played }) => (
+            <article className="club-card" key={team.id}>
+              <Crest team={team} />
+              <div>
+                <small>{team.code}</small>
+                <h3>{team.name}</h3>
+                {team.player_name && <p className="club-player">Jogador · {team.player_name}</p>}
+                <p>
+                  {played} {played === 1 ? 'jogo' : 'jogos'} · {points} {points === 1 ? 'ponto' : 'pontos'}
+                </p>
+              </div>
+              <div className="club-actions">
+                <button type="button" onClick={() => onEdit(team)} aria-label={'Editar ' + team.name}>
+                  <Pencil size={15} aria-hidden="true" /> Editar
+                </button>
+                <button
+                  type="button"
+                  className="remove-club"
+                  onClick={() => confirmRemove(team)}
+                  aria-label={'Excluir ' + team.name}
+                >
+                  <Trash2 size={15} aria-hidden="true" /> Excluir
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
         <Empty action={!rows.length ? 'Cadastrar clube' : null} onAction={addTeam}>

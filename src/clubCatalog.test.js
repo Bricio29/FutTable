@@ -3,12 +3,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { clubCatalog, catalogClubForTeam } from './clubCatalog.js';
 
-test('todos os clubes têm identificação própria, nota e escudo incluído no app', async () => {
+test('todos os clubes têm identificação própria e escudo incluído no app', async () => {
   assert.equal(clubCatalog.length, 50);
   assert.equal(new Set(clubCatalog.map(club => club.id)).size, 50);
   for (const club of clubCatalog) {
     assert.match(club.code, /^[A-Z0-9]{2,4}$/);
-    assert.ok(Number.isInteger(club.rating) && club.rating >= 0 && club.rating <= 100);
     assert.match(club.logo, /^\/clubs\/[a-z0-9-]+\.(?:svg|png)$/);
   }
   for (const logo of new Set(clubCatalog.map(club => club.logo))) {
@@ -19,8 +18,8 @@ test('todos os clubes têm identificação própria, nota e escudo incluído no 
 });
 
 test('clubes anteriores ao catálogo recebem o escudo pelo nome preservando a categoria', () => {
-  assert.equal(catalogClubForTeam({ name: 'Atletico de Madrid' }).rating, 83);
-  assert.equal(catalogClubForTeam({ name: 'Atlético de Madrid (W)' }).rating, 79);
+  assert.equal(catalogClubForTeam({ name: 'Atletico de Madrid' }).id, 'atletico-madrid');
+  assert.equal(catalogClubForTeam({ name: 'Atlético de Madrid (W)' }).id, 'atletico-madrid-w');
   assert.equal(catalogClubForTeam({ name: 'Clube do bairro' }), undefined);
   assert.equal(catalogClubForTeam({ name: 'Meu clube', catalog_id: 'real-madrid' }).name, 'Real Madrid');
 });

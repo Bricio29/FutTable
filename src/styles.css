@@ -234,6 +234,47 @@ a svg {
 }
 .hero-content {
   padding: 28px clamp(24px, 3vw, 48px);
+  min-width: 0;
+}
+.league-title,
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.league-title h1,
+.page-kicker {
+  overflow-wrap: anywhere;
+}
+.league-title-edit {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #eef6e8;
+  background: #173d2fcc;
+  border: 1px solid #89ab90;
+  border-radius: 8px;
+}
+.league-title-edit:hover {
+  background: #31583e;
+}
+.page-actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .page-title:has(.page-actions) {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 480px) {
+  .header-inner nav[aria-label] a {
+    flex-direction: column;
+    padding-inline: 3px;
+    gap: 3px;
+  }
 }
 .hero-tag,
 .page-kicker {

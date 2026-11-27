@@ -61,8 +61,11 @@ export default function LeagueDialog({ type, match, team, matchCount, pendingCou
           name: fields.name, code: fields.code, color: fields.color,
           catalog_id: fields.catalog_id || null, player_name: player,
         };
-        if (type === 'club') await model.addTeam({ ...draft, id: recordId });
-        else await model.updateTeam(team, draft);
+        const saved = type === 'club' ? await model.addTeam({ ...draft, id: recordId }) : await model.updateTeam(team, draft);
+        onFinish(saved.player_name
+          ? saved.player_name + ' joga com ' + saved.name + ' nos próximos sorteios.'
+          : type === 'club' ? 'Clube cadastrado.' : 'Clube atualizado.');
+        return;
       }
       if (type === 'removeClub') await model.removeTeam(team, matchCount);
       if (type === 'match') await model.addMatch({ ...fields, home_id: home, away_id: away, id: recordId });
@@ -70,8 +73,6 @@ export default function LeagueDialog({ type, match, team, matchCount, pendingCou
       if (type === 'remove') await model.removeMatch(match.id);
       onFinish(
         {
-          club: 'Clube cadastrado.',
-          editClub: 'Clube atualizado.',
           removeClub: 'Clube excluído.',
           match: 'Resultado registrado.',
           edit: 'Placar atualizado.',

@@ -46,9 +46,18 @@ async function readBody(req) {
 
 async function handleApi(req, res, pathname, config, fetchImpl) {
   if (req.method === 'GET' && pathname === '/api/config') return json(res, 200, config);
-  const client = leagueClient(config, req.headers.authorization, fetchImpl);
+  const client = leagueClient(config, req.headers.authorization, fetchImpl, req.headers['x-futtable-league']);
+  if (req.method === 'GET' && pathname === '/api/leagues') {
+    return json(res, 200, await client.listLeagues());
+  }
+  if (req.method === 'POST' && pathname === '/api/leagues') {
+    return json(res, 201, await client.createLeague(await readBody(req)));
+  }
   if (req.method === 'GET' && pathname === '/api/league') {
     return json(res, 200, await client.getLeague());
+  }
+  if (req.method === 'PATCH' && pathname === '/api/league') {
+    return json(res, 200, await client.renameLeague(await readBody(req)));
   }
   if (req.method === 'POST' && ['/api/teams', '/api/matches'].includes(pathname)) {
     const data = await client.add(pathname.slice('/api/'.length), await readBody(req));
@@ -56,6 +65,9 @@ async function handleApi(req, res, pathname, config, fetchImpl) {
   }
   if (req.method === 'POST' && pathname === '/api/draws') {
     return json(res, 201, await client.createDraw(await readBody(req)));
+  }
+  if (req.method === 'POST' && pathname === '/api/club-draws') {
+    return json(res, 201, await client.createClubDraw(await readBody(req)));
   }
   const result = pathname.match(/^\/api\/matches\/([^/]+)\/result$/);
   if (req.method === 'POST' && result) {

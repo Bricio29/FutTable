@@ -1,3 +1,5 @@
+import { clubCatalog, getCatalogClub } from '../src/clubCatalog.js';
+
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const columns = {
   teams: 'id,name,code,color,catalog_id,player_name',
@@ -22,6 +24,14 @@ function validateScores(...scores) {
   if (!scores.every(n => Number.isInteger(n) && n >= 0 && n <= 99)) {
     throw new HttpError(400, 'Informe gols inteiros entre 0 e 99.');
   }
+}
+
+function leagueName(value) {
+  const name = typeof value === 'string' ? value.trim().replace(/\s+/gu, ' ') : '';
+  if (!name || [...name].length > 60 || /[\u0000-\u001f\u007f]/u.test(name)) {
+    throw new HttpError(400, 'Use entre 1 e 60 caracteres no nome da liga.');
+  }
+  return name;
 }
 
 function teamFields(name, code, color) {
@@ -119,11 +129,12 @@ export function publicConfig(env) {
   return { url: url.origin, key };
 }
 
-export function leagueClient(config, authorization, fetchImpl = fetch) {
+export function leagueClient(config, authorization, fetchImpl = fetch, leagueId) {
   if (!/^Bearer [^\s,]+$/i.test(authorization || '')) {
     throw new HttpError(401, 'Entre na sua conta para acessar o campeonato.');
   }
   if (!config.url) throw new HttpError(503, 'Configure o Supabase para usar sua conta.');
+  const scope = leagueId === undefined ? null : uuid(leagueId);
 
   async function request(path, method = 'GET', body) {
     let response;
@@ -134,6 +145,7 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
         headers: {
           apikey: config.key,
           Authorization: authorization,
+          ...(scope && { 'X-FutTable-League': scope }),
           'Content-Type': 'application/json',
           Prefer: 'return=representation',
         },
@@ -181,7 +193,20 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
   }
 
   return {
+    listLeagues: () => request('rpc/futtable_list_leagues', 'POST', {}),
+    createLeague(data) {
+      return request('rpc/futtable_create_league', 'POST', {
+        request_id: uuid(data?.id), league_name: leagueName(data?.name),
+      });
+    },
     getLeague: () => request('rpc/futtable_league', 'POST', {}),
+    renameLeague(data) {
+      if (!data || !Object.hasOwn(data, 'previous_name')) throw new HttpError(400, 'Informe o nome anterior da liga.');
+      return request('rpc/futtable_rename_league', 'POST', {
+        league_name: leagueName(data.name),
+        expected_name: data.previous_name === null ? null : leagueName(data.previous_name),
+      });
+    },
     async add(table, data) {
       const record = validateRecord(table, data);
       const path = table + '?select=' + columns[table];
@@ -210,6 +235,22 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
         }
       }
       return request('rpc/futtable_draw', 'POST', args);
+    },
+    createClubDraw(data) {
+      const request_id = uuid(data?.id);
+      const { player_names, catalog_ids } = data;
+      if (!Array.isArray(player_names) || !Array.isArray(catalog_ids) ||
+          player_names.length < 2 || player_names.length > clubCatalog.length || player_names.length !== catalog_ids.length) {
+        throw new HttpError(400, 'Selecione de 2 a 50 jogadores e um clube para cada jogador.');
+      }
+      const names = player_names.map(name => rosterField('player_name', name));
+      if (names.some(name => !name) || new Set(names.map(name => name.toLowerCase())).size !== names.length) {
+        throw new HttpError(400, 'Informe um nome diferente para cada jogador.');
+      }
+      if (catalog_ids.some(id => !getCatalogClub(id)) || new Set(catalog_ids).size !== catalog_ids.length) {
+        throw new HttpError(400, 'Escolha clubes distintos do catálogo.');
+      }
+      return request('rpc/futtable_club_draw', 'POST', { request_id, player_names: names, catalog_ids });
     },
     finishMatch(id, data) {
       const { home_score, away_score, played_on } = resultFields(data);

@@ -95,10 +95,12 @@ function DrawScore({ match, teamsById, onClose, finishMatch }) {
   );
 }
 
-export default function Draws({ model, openClubs }) {
+export default function Draws({ model, openClubs, initialTeams }) {
   const { league, drawRound, finishMatch } = model;
   const [selected, setSelected] = useState(null);
-  const [absent, setAbsent] = useState([]);
+  const [absent, setAbsent] = useState(() =>
+    initialTeams ? league.teams.filter((team) => !initialTeams.includes(team.id)).map((team) => team.id) : [],
+  );
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -166,7 +168,7 @@ export default function Draws({ model, openClubs }) {
         </button>
       </div>
       {players.length > 0 && (
-        <details className="draw-selection">
+        <details className="draw-selection" open={Boolean(initialTeams) || draws.length === 0}>
           <summary>Selecionar quem vai jogar</summary>
           <fieldset disabled={busy}>
             <legend>Participantes da próxima rodada</legend>

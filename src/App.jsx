@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   ChartNoAxesColumnIncreasing,
   Check,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   Plus,
+  Pencil,
   Shield,
   Swords,
   Trophy,
@@ -20,14 +22,22 @@ import { useLeague } from './useLeague.js';
 import { Clubs, Rankings, Results } from './LeagueViews.jsx';
 import LeagueDialog from './LeagueDialog.jsx';
 import Draws from './Draws.jsx';
+import ClubDraw from './ClubDraw.jsx';
+import Leagues from './Leagues.jsx';
 
 const pages = [
   { id: 'geral', label: 'Visão geral', Icon: LayoutDashboard },
   { id: 'classificacao', label: 'Classificação', Icon: ListOrdered },
   { id: 'partidas', label: 'Partidas', Icon: Swords },
   { id: 'clubes', label: 'Clubes', Icon: Shield },
+  { id: 'ligas', label: 'Ligas', Icon: Trophy },
 ];
-const pageFromUrl = () => pages.find((page) => '#/' + page.id === window.location.hash)?.id || 'geral';
+const clubDrawPage = 'sorteio-de-clubes';
+function routeFromUrl() {
+  const [path, search] = window.location.hash.slice(2).split('?');
+  const page = path === clubDrawPage || pages.some((item) => item.id === path) ? path : 'geral';
+  return { page, params: new URLSearchParams(search) };
+}
 
 function Brand() {
   return (
@@ -72,14 +82,15 @@ function Metrics({ league }) {
   );
 }
 
-function Dashboard({ token, page, navigate }) {
-  const model = useLeague(token);
+function Dashboard({ token, leagueScope, activeId, onOpenLeague, route, navigate }) {
+  const { page, params } = route;
+  const model = useLeague(token, leagueScope);
   const [dialog, setDialog] = useState(null);
   const [toast, setToast] = useState('');
   const overview = page === 'geral';
   const { league, error, loading } = model;
   const rows = useMemo(() => standings(league), [league]);
-  const label = pages.find((p) => p.id === page).label;
+  const label = page === clubDrawPage ? 'Sorteio de clubes' : pages.find((p) => p.id === page).label;
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(''), 4000);
@@ -89,7 +100,8 @@ function Dashboard({ token, page, navigate }) {
   const addingClub = page === 'clubes' || (!loading && !error && league.teams.length < 2);
   const newMatch = () => setDialog({ type: 'match' });
   const addTeam = () => setDialog({ type: 'club' });
-  const title = 'Minha liga';
+  const title = league.league_name || 'Minha liga';
+  const selectedClubs = params.get('clubes');
   return (
     <main id="conteudo" tabIndex={-1} className="shell main">
       <div className="context-line">
@@ -117,7 +129,18 @@ function Dashboard({ token, page, navigate }) {
             <div className="hero-tag">
               <span /> CENTRAL DO CAMPEONATO
             </div>
-            <h1>{title}</h1>
+            <div className="league-title">
+              <h1>{title}</h1>
+              <button
+                type="button"
+                className="league-title-edit"
+                aria-label="Alterar nome da liga"
+                title="Alterar nome da liga"
+                onClick={() => navigate('ligas?editar=atual')}
+              >
+                <Pencil size={17} aria-hidden="true" />
+              </button>
+            </div>
             <div className="hero-meta">
               <span>
                 <Trophy />
@@ -157,17 +180,38 @@ function Dashboard({ token, page, navigate }) {
             </div>
             <h1>{label}</h1>
           </div>
-          <button
-            className="primary"
-            disabled={loading || Boolean(error)}
-            onClick={addingClub ? addTeam : newMatch}
-          >
-            <Plus size={16} />
-            {addingClub ? 'Cadastrar clube' : 'Registrar partida'}
-          </button>
+          {page === clubDrawPage ? (
+            <button type="button" className="secondary" onClick={() => navigate('clubes')}>
+              <ArrowLeft size={16} /> Voltar aos clubes
+            </button>
+          ) : (
+            page !== 'ligas' && (
+              <div className="page-actions">
+                {(page === 'clubes' || page === 'partidas') && (
+                  <button type="button" className="secondary" onClick={() => navigate(clubDrawPage)}>
+                    <Dices size={16} /> Sortear clubes
+                  </button>
+                )}
+                <button
+                  className="primary"
+                  disabled={loading || Boolean(error)}
+                  onClick={addingClub ? addTeam : newMatch}
+                >
+                  <Plus size={16} /> {addingClub ? 'Cadastrar clube' : 'Registrar partida'}
+                </button>
+              </div>
+            )
+          )}
         </div>
       )}
-      {loading ? (
+      {page === 'ligas' ? (
+        <Leagues
+          model={model}
+          activeId={activeId}
+          editActive={params.get('editar') === 'atual'}
+          onOpen={onOpenLeague}
+        />
+      ) : loading ? (
         <div className="panel loading" role="status">
           Carregando a liga…
         </div>
@@ -181,7 +225,21 @@ function Dashboard({ token, page, navigate }) {
       ) : (
         <>
           {overview && <Metrics league={league} />}
-          {page === 'partidas' && <Draws model={model} openClubs={() => navigate('clubes')} />}
+          {page === clubDrawPage && (
+            <ClubDraw
+              teams={league.teams}
+              onDraw={model.drawClubs}
+              onMatches={(ids) => navigate('partidas?clubes=' + ids.join(','))}
+            />
+          )}
+          {page === 'partidas' && (
+            <Draws
+              key={selectedClubs ?? 'todos'}
+              model={model}
+              initialTeams={selectedClubs?.split(',')}
+              openClubs={() => navigate('clubes')}
+            />
+          )}
           <div className={overview ? 'dashboard-grid' : 'page-body'}>
             {(overview || page === 'classificacao') && (
               <Rankings rows={rows} compact={overview} navigate={navigate} addTeam={addTeam} />
@@ -234,19 +292,40 @@ function Dashboard({ token, page, navigate }) {
 }
 
 function PrivateLeague({ auth }) {
-  const [page, setPage] = useState(pageFromUrl);
+  const [route, setRoute] = useState(routeFromUrl);
+  const { page } = route;
+  const userId = auth.session.user.id;
+  const preferenceKey = 'futtable.liga.' + userId;
+  const [activeId, setActiveId] = useState(() => {
+    try {
+      const saved = localStorage.getItem(preferenceKey);
+      return /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(saved) ? saved : userId;
+    } catch {
+      return userId;
+    }
+  });
   const [authOpen, setAuthOpen] = useState(false);
   useEffect(() => {
-    const onHash = () => setPage(pageFromUrl());
+    const onHash = () => setRoute(routeFromUrl());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   useEffect(() => {
-    document.title = pages.find((p) => p.id === page).label + ' · FutTable';
+    const title = page === clubDrawPage ? 'Sorteio de clubes' : pages.find((p) => p.id === page).label;
+    document.title = title + ' · FutTable';
   }, [page]);
   const navigate = (next) => {
     window.location.hash = '/' + next;
   };
+  function openLeague(id) {
+    setActiveId(id);
+    try {
+      localStorage.setItem(preferenceKey, id);
+    } catch {
+      // A escolha continua válida nesta sessão quando o navegador restringe o armazenamento.
+    }
+    navigate('geral');
+  }
   return (
     <>
       <a
@@ -266,7 +345,11 @@ function PrivateLeague({ auth }) {
           </a>
           <nav aria-label="Navegação principal">
             {pages.map(({ id, label, Icon }) => (
-              <a key={id} href={'#/' + id} aria-current={page === id ? 'page' : undefined}>
+              <a
+                key={id}
+                href={'#/' + id}
+                aria-current={(page === clubDrawPage ? 'clubes' : page) === id ? 'page' : undefined}
+              >
                 <Icon size={16} strokeWidth={1.8} />
                 {label}
               </a>
@@ -278,7 +361,15 @@ function PrivateLeague({ auth }) {
           </button>
         </div>
       </header>
-      <Dashboard token={auth.session.access_token} page={page} navigate={navigate} />
+      <Dashboard
+        key={activeId}
+        token={auth.session.access_token}
+        leagueScope={activeId === userId ? null : activeId}
+        activeId={activeId}
+        onOpenLeague={openLeague}
+        route={route}
+        navigate={navigate}
+      />
       <footer className="shell footer">
         <a aria-label="FutTable, início" href="#/geral">
           <Brand />

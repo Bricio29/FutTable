@@ -86,7 +86,7 @@
 .catalog-option,
 .catalog-selection {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   text-align: left;
@@ -120,26 +120,13 @@
   font-size: 0.7rem;
   font-weight: 500;
 }
-.catalog-rating {
-  display: inline-grid;
-  min-width: 27px;
-  min-height: 23px;
-  padding: 2px 5px;
-  place-items: center;
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-  color: #295635;
-  background: #dfedce;
-  border-radius: 4px;
-}
 .catalog-none {
   padding: 14px;
   font-size: 0.84rem;
   color: #506557;
 }
 .catalog-selection {
-  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   padding: 12px;
   background: #f3f7ef;
   border: 1px solid #d5e2d0;
@@ -147,16 +134,6 @@
 }
 .catalog-selection strong {
   font-size: 0.91rem;
-}
-.club-meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.club-meta .catalog-rating {
-  min-width: 23px;
-  min-height: 18px;
-  font-size: 0.66rem;
 }
 .club-card .club-player {
   margin: 3px 0;
