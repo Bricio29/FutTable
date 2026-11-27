@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://fut-table-fut-table.pxohxs.easypanel.host/api/:path*"
+    }
+  ]
+}
