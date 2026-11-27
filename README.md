@@ -49,6 +49,13 @@ npm start
 
 O processo Node serve os arquivos de `dist/` e as rotas `/api` na porta `PORT` (padrão 3001). Configure as variáveis de ambiente e o acesso HTTPS na hospedagem. O login, a recuperação de senha e a persistência em nuvem usam o mesmo projeto Supabase.
 
+### Publicar no Easypanel
+
+1. Crie um serviço **App** e conecte a origem GitHub ao repositório `Bricio29/FutTable`, branch `main`.
+2. Selecione o método de build **Dockerfile**, com contexto na raiz do repositório (`.`) e caminho `Dockerfile`. A imagem executa os testes, compila o React e inicia o servidor Node.
+3. Em **Environment**, defina `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` para o projeto em que aplicou a migração. Com as duas variáveis vazias, o app abre em demonstração local.
+4. Em **Domains**, encaminhe o domínio HTTPS para a porta interna `3001` e faça o deploy. Registre esse endereço no Supabase conforme a seção **Ativar as contas e o banco**.
+
 ## Validação
 
 Execute `npm test` para verificar pontuação, desempates, validação de placares e comportamento da API. Para conferir o isolamento no banco, execute [rls.test.sql](server/rls.test.sql) no SQL Editor de um projeto de teste com a migração aplicada. O teste cria duas contas temporárias e desfaz as operações ao final.
