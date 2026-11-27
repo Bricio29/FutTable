@@ -17,7 +17,7 @@ Abra `http://localhost:5173`. O comando inicia a interface e a API. A primeira t
 
 Para uma instalação própria do Supabase pelo Easypanel, siga a seção [Supabase no Easypanel](#supabase-no-easypanel). Os passos a seguir usam o painel do serviço hospedado pela Supabase.
 
-1. Em um projeto Supabase, abra o SQL Editor e execute a [migração inicial](supabase/migrations/202611270001_league.sql) e depois a [migração de gestão de clubes](supabase/migrations/202611270002_manage_teams.sql), uma vez cada. Para atualizar um banco que já possui a migração inicial, execute apenas a segunda.
+1. No SQL Editor do Supabase, aplique as migrações pendentes em ordem. Um banco novo precisa da [migração inicial](supabase/migrations/202611270001_league.sql), da [gestão de clubes](supabase/migrations/202611270002_manage_teams.sql) e da [migração de jogadores e sorteios](supabase/migrations/202611270003_players_draws.sql). Se as duas primeiras já foram aplicadas, execute apenas a terceira.
 2. Em **Authentication**, habilite o provedor **Email** e o cadastro de usuários. Para exigir confirmação, habilite **Confirm email**. Em **URL Configuration**, defina a **Site URL** e adicione `http://localhost:5173/` às **Redirect URLs** durante o desenvolvimento. Ao publicar, configure também o endereço HTTPS da aplicação. [Guia de login por senha e recuperação](https://supabase.com/docs/guides/auth/passwords)
 3. Copie o modelo de ambiente e preencha as duas variáveis com a **Project URL** e a **Publishable key** (`sb_publishable_…`) do painel do projeto. A chave publicável é enviada ao navegador. O token de cada usuário identifica sua liga nas operações da API.
 
@@ -33,7 +33,13 @@ Para uma instalação própria do Supabase pelo Easypanel, siga a seção [Supab
 
 4. Reinicie `npm run dev` e escolha **Criar conta** na tela de login. Se a confirmação estiver ativa, abra o link recebido por e-mail. Para atender usuários fora da equipe do projeto, configure um provedor SMTP no Supabase. [Configuração de e-mail do Supabase](https://supabase.com/docs/guides/auth/auth-smtp)
 
-Cada conta começa com uma liga privada vazia. Cadastre dois clubes e registre a primeira partida. Ao sair, a aplicação volta à tela de login. Os clubes de uma demonstração anterior não são copiados para a conta. O banco aplica políticas de acesso por linha e verifica se ambos os clubes de cada partida pertencem à mesma conta. [Políticas de acesso do PostgreSQL no Supabase](https://supabase.com/docs/guides/database/postgres/row-level-security)
+Cada conta começa com uma liga privada vazia. O catálogo fica disponível para escolha desde o primeiro acesso. O banco aplica políticas de acesso por linha e verifica se ambos os clubes de cada partida pertencem à mesma conta. [Políticas de acesso do PostgreSQL no Supabase](https://supabase.com/docs/guides/database/postgres/row-level-security)
+
+## Montar uma rodada com os jogadores
+
+1. Em **Clubes → Cadastrar clube**, procure uma das 50 equipes do catálogo e confira o escudo e a nota. Escolha a equipe, informe o nome ou apelido do jogador e salve. Para criar sua própria equipe, escolha **Personalizado**. Em um clube já cadastrado, use **Editar** para vincular o jogador ou escolher o escudo no catálogo.
+2. Em **Partidas → Selecionar quem vai jogar**, marque os participantes da rodada e clique em **Sortear rodada**. Cada jogador participa uma vez com seu clube. Se a quantidade for ímpar, o sorteio indica quem folga. Você pode montar várias rodadas e alternar entre elas em **Exibir rodada**.
+3. Depois de jogar, abra a rodada e escolha **Lançar placar** no confronto. Salvar o resultado atualiza a classificação, inclusive em empates por 0 a 0. O histórico do sorteio guarda os nomes dos jogadores e clubes que participaram.
 
 ## Regras da classificação
 
@@ -65,10 +71,10 @@ O processo Node serve os arquivos de `dist/` e as rotas `/api` na porta `PORT` (
 1. Em **Supabase → Environment**, localize `SUPABASE_PUBLIC_URL`. Ela deve conter a origem HTTPS pública do gateway Kong, por exemplo `https://supabase.exemplo.com`. Se o valor ainda for local, confira em **Domains** o domínio direcionado a `kong` (porta interna `8000` no template oficial). Localize também a chave pública de cliente: `SUPABASE_PUBLISHABLE_KEY` ou, nas instalações com chaves legadas, `ANON_KEY`.
 2. Em **FutTable → Environment**, copie `SUPABASE_PUBLIC_URL` e a chave pública escolhida, com os mesmos nomes. A API entrega esses valores ao navegador e mantém o token do usuário nas operações da liga.
 3. No serviço Supabase, configure `SITE_URL` com o endereço público da interface e inclua a raiz HTTPS da interface em `ADDITIONAL_REDIRECT_URLS`. Em uma instalação compartilhada, preserve a URL padrão e acrescente o novo endereço à lista existente, separado por vírgula. Aplique o deploy dos serviços cujas variáveis foram alteradas.
-4. No SQL Editor do Studio, aplique em ordem a [migração inicial](supabase/migrations/202611270001_league.sql) e a [migração de gestão de clubes](supabase/migrations/202611270002_manage_teams.sql). Aplique somente as migrações pendentes. Abra `/api/config` pelo domínio do FutTable para conferir a URL e a chave pública, depois entre em uma conta e salve uma partida para testar a conexão ao banco.
+4. No SQL Editor do Studio, aplique as migrações pendentes na ordem descrita em [Ativar as contas e o banco](#ativar-as-contas-e-o-banco). Para atualizar uma liga que já possui as duas primeiras migrações, execute a [migração de jogadores e sorteios](supabase/migrations/202611270003_players_draws.sql) e faça o deploy da nova versão do app FutTable no Easypanel. A Vercel usa as mesmas rotas `/api` configuradas no `vercel.json`.
 
 [Template do Supabase para Easypanel](https://easypanel.io/templates/supabase) · [Chaves de cliente no Supabase auto-hospedado](https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys)
 
 ## Validação
 
-Execute `npm test` para verificar pontuação, desempates, validação de placares e comportamento da API. Para conferir o isolamento no banco, execute [rls.test.sql](server/rls.test.sql) no SQL Editor de um projeto de teste com as duas migrações aplicadas. O teste cria duas contas temporárias e desfaz as operações ao final.
+Execute `npm test` para verificar pontuação, desempates, validação de placares e comportamento da API. Para conferir isolamento por conta e sorteios, execute [rls.test.sql](server/rls.test.sql) e [draws.test.sql](server/draws.test.sql) no SQL Editor de um projeto de teste com as três migrações aplicadas. Cada teste desfaz suas operações ao final.

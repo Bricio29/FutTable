@@ -1,7 +1,7 @@
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const columns = {
-  teams: 'id,name,code,color',
-  matches: 'id,home_id,away_id,home_score,away_score,played_on',
+  teams: 'id,name,code,color,catalog_id,player_name',
+  matches: 'id,home_id,away_id,home_score,away_score,played_on,draw_id,home_team_name,away_team_name,home_player_name,away_player_name,home_catalog_id,away_catalog_id',
 };
 
 export class HttpError extends Error {
@@ -39,25 +39,52 @@ function teamFields(name, code, color) {
   return { name, code, color };
 }
 
+// Campos opcionais omitidos por clientes antigos permanecem inalterados no PATCH.
+function rosterField(field, value) {
+  if (value === null) return null;
+  if (field === 'catalog_id') {
+    if (typeof value !== 'string' || value.length > 80 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) {
+      throw new HttpError(400, 'Escolha um clube válido no catálogo.');
+    }
+    return value;
+  }
+  if (typeof value !== 'string') throw new HttpError(400, 'Informe um nome de jogador válido.');
+  const name = value.trim().replace(/\s+/gu, ' ');
+  if ([...name].length > 60 || /[\u0000-\u001f\u007f]/u.test(name)) {
+    throw new HttpError(400, 'O nome do jogador pode ter até 60 caracteres.');
+  }
+  return name || null;
+}
+
+function resultFields(data) {
+  const { home_score, away_score, played_on } = data ?? {};
+  validateScores(home_score, away_score);
+  if (typeof played_on !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(played_on) || played_on.startsWith('0000')) {
+    throw new HttpError(400, 'Informe uma data válida.');
+  }
+  const date = new Date(played_on + 'T00:00:00Z');
+  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== played_on) {
+    throw new HttpError(400, 'Informe uma data válida.');
+  }
+  return { home_score, away_score, played_on };
+}
+
 export function validateRecord(table, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new HttpError(400, 'Envie os dados em um objeto JSON.');
   }
   const id = uuid(data.id);
-  if (table === 'teams') return { id, ...teamFields(data.name, data.code, data.color) };
+  if (table === 'teams') {
+    const record = { id, ...teamFields(data.name, data.code, data.color) };
+    for (const field of ['catalog_id', 'player_name']) {
+      if (Object.hasOwn(data, field)) record[field] = rosterField(field, data[field]);
+    }
+    return record;
+  }
   const home_id = uuid(data.home_id);
   const away_id = uuid(data.away_id);
   if (home_id === away_id) throw new HttpError(400, 'Escolha dois clubes diferentes.');
-  validateScores(data.home_score, data.away_score);
-  const day = data.played_on;
-  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || day.startsWith('0000')) {
-    throw new HttpError(400, 'Informe uma data válida.');
-  }
-  const date = new Date(day + 'T00:00:00Z');
-  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== day) {
-    throw new HttpError(400, 'Informe uma data válida.');
-  }
-  return { id, home_id, away_id, home_score: data.home_score, away_score: data.away_score, played_on: day };
+  return { id, home_id, away_id, ...resultFields(data) };
 }
 
 function isLegacyAnonKey(key) {
@@ -123,7 +150,12 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
       throw new HttpError(response.status, 'Sua sessão não permite esta ação. Entre novamente.');
     }
     if (response.status === 429) throw new HttpError(429, 'Muitas solicitações. Aguarde um instante.');
+    if (['PT400', 'PT404', 'PT409'].includes(data?.code)) {
+      throw new HttpError(Number(data.code.slice(2)), data.message);
+    }
     if (data?.code === '23505') {
+      if (data.message?.includes('teams_player_per_owner')) throw new HttpError(409, 'Este jogador já está vinculado a um clube.');
+      if (data.message?.includes('teams_catalog_per_owner')) throw new HttpError(409, 'Este clube do catálogo já está na liga.');
       throw new HttpError(409, 'Já existe um registro com este nome ou identificador.');
     }
     if (data?.code === '23503') throw new HttpError(400, 'Selecione clubes do seu campeonato.');
@@ -136,7 +168,7 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
   async function update(table, id, previous, fields) {
     const path = table + '?select=' + columns[table] + '&id=eq.' + uuid(id);
     const conditions = new URLSearchParams();
-    for (const [name, value] of Object.entries(previous)) conditions.set(name, 'eq.' + value);
+    for (const [name, value] of Object.entries(previous)) conditions.set(name, value === null ? 'is.null' : 'eq.' + value);
     const [updated] = await request(path + '&' + conditions, 'PATCH', fields);
     if (updated) return updated;
 
@@ -166,6 +198,25 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
         throw error;
       }
     },
+    createDraw(data) {
+      const args = { request_id: uuid(data?.id) };
+      if (Object.hasOwn(data, 'team_ids')) {
+        if (!Array.isArray(data.team_ids) || data.team_ids.length < 2) {
+          throw new HttpError(400, 'Selecione pelo menos dois clubes com jogador.');
+        }
+        args.team_ids = data.team_ids.map(uuid);
+        if (new Set(args.team_ids).size !== args.team_ids.length) {
+          throw new HttpError(400, 'Cada clube só pode participar uma vez por rodada.');
+        }
+      }
+      return request('rpc/futtable_draw', 'POST', args);
+    },
+    finishMatch(id, data) {
+      const { home_score, away_score, played_on } = resultFields(data);
+      return request('rpc/futtable_finish_match', 'POST', {
+        match_id: uuid(id), goals_home: home_score, goals_away: away_score, game_date: played_on,
+      });
+    },
     updateScore(id, data) {
       const { home_score, away_score, previous_home_score, previous_away_score } = data ?? {};
       validateScores(home_score, away_score, previous_home_score, previous_away_score);
@@ -173,7 +224,15 @@ export function leagueClient(config, authorization, fetchImpl = fetch) {
     },
     updateTeam(id, data) {
       const { name, code, color, previous_name, previous_code, previous_color } = data ?? {};
-      return update('teams', id, teamFields(previous_name, previous_code, previous_color), teamFields(name, code, color));
+      const previous = teamFields(previous_name, previous_code, previous_color);
+      const next = teamFields(name, code, color);
+      for (const field of ['catalog_id', 'player_name']) {
+        if (!Object.hasOwn(data, field)) continue;
+        if (!Object.hasOwn(data, 'previous_' + field)) throw new HttpError(400, 'Confira os dados anteriores do clube.');
+        previous[field] = rosterField(field, data['previous_' + field]);
+        next[field] = rosterField(field, data[field]);
+      }
+      return update('teams', id, previous, next);
     },
     async removeTeam(id, data) {
       const matchCount = data?.match_count;

@@ -26,7 +26,7 @@ do $$
 declare
   removed integer;
 begin
-  if public.futtable_league() <> '{"teams":[],"matches":[]}'::jsonb then
+  if public.futtable_league() <> '{"teams":[],"matches":[],"draws":[]}'::jsonb then
     raise exception 'A segunda conta conseguiu ler dados da primeira';
   end if;
 

@@ -54,6 +54,13 @@ async function handleApi(req, res, pathname, config, fetchImpl) {
     const data = await client.add(pathname.slice('/api/'.length), await readBody(req));
     return json(res, 201, data);
   }
+  if (req.method === 'POST' && pathname === '/api/draws') {
+    return json(res, 201, await client.createDraw(await readBody(req)));
+  }
+  const result = pathname.match(/^\/api\/matches\/([^/]+)\/result$/);
+  if (req.method === 'POST' && result) {
+    return json(res, 200, await client.finishMatch(result[1], await readBody(req)));
+  }
   const record = pathname.match(/^\/api\/(teams|matches)\/([^/]+)$/);
   if (req.method === 'PATCH' && record) {
     const data = await readBody(req);

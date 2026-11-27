@@ -3,6 +3,7 @@ import {
   ChartNoAxesColumnIncreasing,
   Check,
   ChevronRight,
+  Dices,
   Flag,
   Goal,
   LayoutDashboard,
@@ -14,10 +15,11 @@ import {
   UserRound,
 } from 'lucide-react';
 import { AuthDialog, AuthScreen, useAuth } from './auth.jsx';
-import { standings } from './league.js';
+import { isPlayed, standings } from './league.js';
 import { useLeague } from './useLeague.js';
 import { Clubs, Rankings, Results } from './LeagueViews.jsx';
 import LeagueDialog from './LeagueDialog.jsx';
+import Draws from './Draws.jsx';
 
 const pages = [
   { id: 'geral', label: 'Visão geral', Icon: LayoutDashboard },
@@ -39,11 +41,12 @@ function Brand() {
 }
 
 function Metrics({ league }) {
-  const gols = league.matches.reduce((sum, m) => sum + m.home_score + m.away_score, 0);
-  const average = league.matches.length ? gols / league.matches.length : 0;
+  const completed = league.matches.filter(isPlayed);
+  const gols = completed.reduce((sum, m) => sum + m.home_score + m.away_score, 0);
+  const average = completed.length ? gols / completed.length : 0;
   const stats = [
     [Shield, league.teams.length, 'Clubes participantes', 'green'],
-    [Swords, league.matches.length, 'Partidas disputadas', 'blue'],
+    [Swords, completed.length, 'Partidas disputadas', 'blue'],
     [Goal, gols, 'Gols marcados', 'amber'],
     [
       ChartNoAxesColumnIncreasing,
@@ -126,14 +129,23 @@ function Dashboard({ token, page, navigate }) {
                 Campeonato particular
               </span>
             </div>
-            <button
-              className="hero-button"
-              onClick={addingClub ? addTeam : newMatch}
-              disabled={loading || Boolean(error)}
-            >
-              <Plus size={17} />
-              {addingClub ? 'Cadastrar clube' : 'Registrar partida'}
-            </button>
+            <div className="hero-buttons">
+              <button
+                className="hero-button"
+                onClick={addingClub ? addTeam : newMatch}
+                disabled={loading || Boolean(error)}
+              >
+                <Plus size={17} />
+                {addingClub ? 'Cadastrar clube' : 'Registrar partida'}
+              </button>
+              <button
+                type="button"
+                className="hero-button hero-alternate"
+                onClick={() => navigate('partidas')}
+              >
+                <Dices size={17} /> Sorteio de partidas
+              </button>
+            </div>
           </div>
         </section>
       ) : (
@@ -169,6 +181,7 @@ function Dashboard({ token, page, navigate }) {
       ) : (
         <>
           {overview && <Metrics league={league} />}
+          {page === 'partidas' && <Draws model={model} openClubs={() => navigate('clubes')} />}
           <div className={overview ? 'dashboard-grid' : 'page-body'}>
             {(overview || page === 'classificacao') && (
               <Rankings rows={rows} compact={overview} navigate={navigate} addTeam={addTeam} />
@@ -186,9 +199,12 @@ function Dashboard({ token, page, navigate }) {
             {page === 'clubes' && (
               <Clubs
                 rows={rows}
+                matches={league.matches}
                 addTeam={addTeam}
                 onEdit={(team) => setDialog({ type: 'editClub', team })}
-                onRemove={(team, matchCount) => setDialog({ type: 'removeClub', team, matchCount })}
+                onRemove={(team, matchCount, pendingCount) =>
+                  setDialog({ type: 'removeClub', team, matchCount, pendingCount })
+                }
               />
             )}
           </div>

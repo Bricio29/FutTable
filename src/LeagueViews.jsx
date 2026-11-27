@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { isPlayed, matchTeam } from './league.js';
+import { catalogClubForTeam, normalizeSearch } from './clubCatalog.js';
+import './catalog.css';
 import {
   ArrowRight,
   Anchor,
@@ -20,12 +23,20 @@ import {
 } from 'lucide-react';
 
 const emblems = [Sun, Mountain, Star, Waves, Crown, Zap, Anchor, TreePine];
-export function Crest({ team }) {
-  const last = parseInt(team.id.slice(-4), 16);
-  const Emblem = emblems[((last || 1) - 1) % emblems.length];
+export function Crest({ team, catalogClub = catalogClubForTeam(team) }) {
+  const [failedLogo, setFailedLogo] = useState('');
+  if (catalogClub?.logo && failedLogo !== catalogClub.logo) {
+    return (
+      <span aria-hidden="true" className="crest crest-logo">
+        <img src={catalogClub.logo} alt="" loading="lazy" decoding="async" onError={() => setFailedLogo(catalogClub.logo)} />
+      </span>
+    );
+  }
+  const last = parseInt(team.id.slice(-4), 16) || 1;
+  const Emblem = emblems[(last - 1) % emblems.length];
   return (
     <span aria-hidden="true" className={'crest shape-' + (last % 3)} style={{ '--club': team.color }}>
-      <Emblem strokeWidth={2.4} />
+      {catalogClub ? <span className="crest-code">{catalogClub.code}</span> : <Emblem strokeWidth={2.4} />}
     </span>
   );
 }
@@ -194,7 +205,7 @@ const shortDate = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'sho
 export function Results({ league, compact, navigate, newMatch, onEdit, onRemove }) {
   const [club, setClub] = useState('');
   const teamsById = new Map(league.teams.map((team) => [team.id, team]));
-  const games = [...league.matches]
+  const games = league.matches.filter(isPlayed)
     .filter((m) => compact || !club || m.home_id === club || m.away_id === club)
     .sort((a, b) => b.played_on.localeCompare(a.played_on) || b.id.localeCompare(a.id));
   const shown = compact ? games.slice(0, 3) : games;
@@ -233,23 +244,19 @@ export function Results({ league, compact, navigate, newMatch, onEdit, onRemove 
                   Encerrada
                 </span>
               </div>
-              {[
-                ['home_id', 'home_score'],
-                ['away_id', 'away_score'],
-              ].map(([id, key]) => {
-                const team = teamsById.get(match[id]);
+              {['home', 'away'].map((side) => {
+                const team = matchTeam(match, side, teamsById);
                 if (!team) return null;
+                const goals = match[side + '_score'];
+                const won = goals > match[side === 'home' ? 'away_score' : 'home_score'];
                 return (
-                  <div
-                    key={id}
-                    className={
-                      'result-team' +
-                      (match[key] > match[key === 'home_score' ? 'away_score' : 'home_score'] ? ' won' : '')
-                    }
-                  >
+                  <div key={side} className={'result-team' + (won ? ' won' : '')}>
                     <Crest team={team} />
-                    <span>{team.name}</span>
-                    <b>{match[key]}</b>
+                    <span>
+                      {team.name}
+                      {match.draw_id && <small className="result-player-name">{team.player_name}</small>}
+                    </span>
+                    <b>{goals}</b>
                   </div>
                 );
               })}
@@ -296,15 +303,16 @@ export function Results({ league, compact, navigate, newMatch, onEdit, onRemove 
   );
 }
 
-export function Clubs({ rows, addTeam, onEdit, onRemove }) {
+export function Clubs({ rows, matches, addTeam, onEdit, onRemove }) {
   const [query, setQuery] = useState('');
-  const normalize = (s) =>
-    s
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim();
-  const clubs = rows.filter(({ team }) => normalize(team.name + ' ' + team.code).includes(normalize(query)));
+  const search = normalizeSearch(query);
+  const clubs = rows.filter(({ team }) =>
+    normalizeSearch([team.name, team.code, team.player_name].filter(Boolean).join(' ')).includes(search)
+  );
+  function confirmRemove(team) {
+    const fixtures = matches.filter(match => match.home_id === team.id || match.away_id === team.id);
+    onRemove(team, fixtures.length, fixtures.filter(match => match.home_score === null).length);
+  }
   return (
     <section className="panel">
       <SectionHead title="Clubes participantes" Icon={Shield} />
@@ -313,38 +321,45 @@ export function Clubs({ rows, addTeam, onEdit, onRemove }) {
         <input
           aria-label="Buscar clube"
           type="search"
-          placeholder="Buscar por nome ou sigla"
+          placeholder="Buscar por clube, sigla ou jogador"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
       {clubs.length ? (
         <div className="club-grid">
-          {clubs.map(({ team, points, played }) => (
-            <article className="club-card" key={team.id}>
-              <Crest team={team} />
-              <div>
-                <small>{team.code}</small>
-                <h3>{team.name}</h3>
-                <p>
-                  {played} {played === 1 ? 'jogo' : 'jogos'} · {points} {points === 1 ? 'ponto' : 'pontos'}
-                </p>
-              </div>
-              <div className="club-actions">
-                <button type="button" onClick={() => onEdit(team)} aria-label={'Editar ' + team.name}>
-                  <Pencil size={15} aria-hidden="true" /> Editar
-                </button>
-                <button
-                  type="button"
-                  className="remove-club"
-                  onClick={() => onRemove(team, played)}
-                  aria-label={'Excluir ' + team.name}
-                >
-                  <Trash2 size={15} aria-hidden="true" /> Excluir
-                </button>
-              </div>
-            </article>
-          ))}
+          {clubs.map(({ team, points, played }) => {
+            const catalogClub = catalogClubForTeam(team);
+            return (
+              <article className="club-card" key={team.id}>
+                <Crest team={team} catalogClub={catalogClub} />
+                <div>
+                  <div className="club-meta">
+                    <small>{team.code}</small>
+                    {catalogClub && <span className="catalog-rating" aria-label={'Nota ' + catalogClub.rating}>{catalogClub.rating}</span>}
+                  </div>
+                  <h3>{team.name}</h3>
+                  {team.player_name && <p className="club-player">Jogador · {team.player_name}</p>}
+                  <p>
+                    {played} {played === 1 ? 'jogo' : 'jogos'} · {points} {points === 1 ? 'ponto' : 'pontos'}
+                  </p>
+                </div>
+                <div className="club-actions">
+                  <button type="button" onClick={() => onEdit(team)} aria-label={'Editar ' + team.name}>
+                    <Pencil size={15} aria-hidden="true" /> Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="remove-club"
+                    onClick={() => confirmRemove(team)}
+                    aria-label={'Excluir ' + team.name}
+                  >
+                    <Trash2 size={15} aria-hidden="true" /> Excluir
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : (
         <Empty action={!rows.length ? 'Cadastrar clube' : null} onAction={addTeam}>

@@ -1,0 +1,166 @@
+.crest.crest-logo {
+  background: transparent;
+  clip-path: none;
+}
+.crest-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.crest-code {
+  font:
+    700 0.52rem/1 system-ui,
+    sans-serif;
+  text-shadow: 0 1px 3px #192820b3;
+}
+.club-card .crest-code {
+  font-size: 0.7rem;
+}
+.club-source {
+  display: flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: #edf1eb;
+}
+.club-source button {
+  flex: 1;
+  min-height: 35px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #506557;
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+.club-source button[aria-pressed='true'] {
+  color: #20442f;
+  background: #fff;
+  box-shadow: 0 1px 4px #122a1b25;
+}
+.dialog-form .club-catalog {
+  min-width: 0;
+}
+.catalog-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dialog-form .catalog-search {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.catalog-search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #62776b;
+  pointer-events: none;
+}
+.editor-dialog .catalog-search input[type='search'] {
+  padding-left: 34px;
+}
+.dialog-form .catalog-filters select {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 46%;
+  font-size: 0.83rem;
+}
+.catalog-options {
+  max-height: min(29vh, 239px);
+  min-height: 50px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border: 1px solid #d4dfd4;
+  border-radius: 8px;
+}
+.catalog-options li + li {
+  border-top: 1px solid #e3e9df;
+}
+.catalog-option,
+.catalog-selection {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.catalog-option {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 0;
+  background: #fff;
+  color: #263a2c;
+  font-size: 0.86rem;
+  font-weight: 590;
+}
+.catalog-option:focus-visible {
+  outline-offset: -3px;
+}
+.catalog-option:hover:enabled,
+.catalog-option[aria-pressed='true'] {
+  background: #edf5e7;
+}
+.catalog-option:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.catalog-option small,
+.catalog-selection small {
+  display: block;
+  margin-top: 2px;
+  color: #536858;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+.catalog-rating {
+  display: inline-grid;
+  min-width: 27px;
+  min-height: 23px;
+  padding: 2px 5px;
+  place-items: center;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  color: #295635;
+  background: #dfedce;
+  border-radius: 4px;
+}
+.catalog-none {
+  padding: 14px;
+  font-size: 0.84rem;
+  color: #506557;
+}
+.catalog-selection {
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  padding: 12px;
+  background: #f3f7ef;
+  border: 1px solid #d5e2d0;
+  border-radius: 8px;
+}
+.catalog-selection strong {
+  font-size: 0.91rem;
+}
+.club-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.club-meta .catalog-rating {
+  min-width: 23px;
+  min-height: 18px;
+  font-size: 0.66rem;
+}
+.club-card .club-player {
+  margin: 3px 0;
+  color: #355a41;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

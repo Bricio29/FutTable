@@ -1,26 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 
-const colors = [
-  ['#166D54', 'Verde'],
-  ['#475CB0', 'Azul'],
-  ['#AB3F53', 'Vermelho'],
-  ['#9058AF', 'Roxo'],
-  ['#167DA1', 'Turquesa'],
-  ['#C36427', 'Laranja'],
-  ['#394757', 'Grafite'],
-  ['#69833C', 'Oliva'],
-];
-const today = () => {
-  const d = new Date();
-  return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0'),
-  ].join('-');
-};
+import ClubFields from './ClubFields.jsx';
+import { today } from './league.js';
 
-export default function LeagueDialog({ type, match, team, matchCount, model, onClose, onFinish, onAddTeam }) {
+export default function LeagueDialog({ type, match, team, matchCount, pendingCount = 0, model, onClose, onFinish, onAddTeam }) {
   const ref = useRef(null);
   const submitLock = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -28,22 +12,19 @@ export default function LeagueDialog({ type, match, team, matchCount, model, onC
   const [conflictStatus, setConflictStatus] = useState(null);
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
-  const [color, setColor] = useState(team?.color ?? colors[0][0]);
   const [recordId] = useState(() => globalThis.crypto?.randomUUID?.());
   const { teams } = model.league;
   const clubForm = type === 'club' || type === 'editClub';
   const deleting = type === 'remove' || type === 'removeClub';
-  const choices =
-    team && !colors.some(([hex]) => hex === team.color.toUpperCase())
-      ? [...colors, [team.color, 'Cor atual ' + team.color]]
-      : colors;
   const currentTeam = team && teams.find((item) => item.id === team.id);
   const teamChanged =
     team &&
     (!currentTeam ||
       currentTeam.name !== team.name ||
       currentTeam.code !== team.code ||
-      currentTeam.color !== team.color);
+      currentTeam.color !== team.color ||
+      (currentTeam.catalog_id ?? null) !== (team.catalog_id ?? null) ||
+      (currentTeam.player_name ?? null) !== (team.player_name ?? null));
   const affectsExistingRecord = type === 'edit' || type === 'editClub' || type === 'removeClub';
   const stale =
     affectsExistingRecord &&
@@ -69,8 +50,20 @@ export default function LeagueDialog({ type, match, team, matchCount, model, onC
     setBusy(true);
     setError('');
     try {
-      if (type === 'club') await model.addTeam({ ...fields, color, id: recordId });
-      if (type === 'editClub') await model.updateTeam(team, { name: fields.name, code: fields.code, color });
+      if (clubForm) {
+        if (fields.club_type === 'catalog' && !fields.catalog_id) throw new Error('Escolha um clube do catálogo.');
+        const player = fields.player_name.trim().replace(/\s+/gu, ' ') || null;
+        const otherTeams = teams.filter(item => item.id !== team?.id);
+        if (player && otherTeams.some(item => item.player_name?.toLowerCase() === player.toLowerCase())) {
+          throw new Error('Já existe um jogador com esse nome na liga.');
+        }
+        const draft = {
+          name: fields.name, code: fields.code, color: fields.color,
+          catalog_id: fields.catalog_id || null, player_name: player,
+        };
+        if (type === 'club') await model.addTeam({ ...draft, id: recordId });
+        else await model.updateTeam(team, draft);
+      }
       if (type === 'removeClub') await model.removeTeam(team, matchCount);
       if (type === 'match') await model.addMatch({ ...fields, home_id: home, away_id: away, id: recordId });
       if (type === 'edit') await model.updateScore(match, fields.home_score, fields.away_score);
@@ -122,52 +115,7 @@ export default function LeagueDialog({ type, match, team, matchCount, model, onC
         </div>
       ) : (
         <form className="dialog-form" onSubmit={submit}>
-          {clubForm && (
-            <>
-              <label>
-                Nome do clube
-                <input
-                  name="name"
-                  defaultValue={team?.name}
-                  placeholder="Ex. União do Vale"
-                  minLength={2}
-                  maxLength={60}
-                  required
-                  autoFocus
-                />
-              </label>
-              <label>
-                Sigla
-                <input
-                  name="code"
-                  defaultValue={team?.code}
-                  placeholder="UDV"
-                  pattern="[A-Za-z0-9]{2,4}"
-                  minLength={2}
-                  maxLength={4}
-                  required
-                  style={{ textTransform: 'uppercase' }}
-                />
-              </label>
-              <fieldset>
-                <legend>Cor do escudo</legend>
-                <div className="color-choices">
-                  {choices.map(([c, label]) => (
-                    <label key={c} style={{ '--club': c }}>
-                      <input
-                        type="radio"
-                        name="chosenColor"
-                        checked={color.toUpperCase() === c.toUpperCase()}
-                        onChange={() => setColor(c)}
-                        aria-label={label}
-                      />
-                      <span />
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            </>
-          )}
+          {clubForm && <ClubFields team={team} teams={teams} />}
           {type === 'match' && (
             <>
               {[
@@ -252,6 +200,7 @@ export default function LeagueDialog({ type, match, team, matchCount, model, onC
                 : matchCount === 1
                   ? '1 partida desse clube também será excluída.'
                   : 'As ' + matchCount + ' partidas desse clube também serão excluídas.'}{' '}
+              {pendingCount > 0 && (pendingCount === 1 ? 'Uma dessas partidas está agendada. ' : pendingCount + ' dessas partidas estão agendadas. ')}
               A classificação será recalculada.
             </p>
           )}

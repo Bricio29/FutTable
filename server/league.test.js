@@ -258,3 +258,69 @@ test('edição e exclusão validam a entrada antes de acessar o banco', async ()
     assert.equal((await manageTeam(handler, 'DELETE', { match_count })).status, 400);
   }
 });
+
+test('cadastro de jogador e clube do catálogo normaliza o nome e valida os campos', () => {
+  const registered = { ...club, catalog_id: 'real-madrid', player_name: 'Ana Silva' };
+  assert.deepEqual(validateRecord('teams', { ...registered, player_name: ' Ana  Silva  ' }), registered);
+  assert.deepEqual(validateRecord('teams', { ...club, player_name: ' ' }), { ...club, player_name: null });
+  for (const field of [{ catalog_id: 'Real Madrid' }, { player_name: 2 }, { player_name: 'x'.repeat(61) }]) {
+    assert.throws(() => validateRecord('teams', { ...club, ...field }), { status: 400 });
+  }
+});
+
+test('edição protege também a associação de jogador e catálogo a partir de valores nulos', async () => {
+  const handler = createHandler({ env, fetchImpl: async (url, options) => {
+    const query = new URL(url).searchParams;
+    assert.equal(query.get('catalog_id'), 'is.null');
+    assert.equal(query.get('player_name'), 'eq.Ana Silva');
+    const { catalog_id, player_name } = JSON.parse(options.body);
+    assert.equal(catalog_id, 'arsenal-w');
+    assert.equal(player_name, null);
+    return Response.json([{ ...club, catalog_id, player_name }]);
+  } });
+  const input = { ...teamEdit, catalog_id: 'arsenal-w', player_name: null, previous_player_name: ' Ana Silva ' };
+  assert.equal((await manageTeam(handler, 'PATCH', input)).status, 400);
+  assert.equal((await manageTeam(handler, 'PATCH', { ...input, previous_catalog_id: null })).status, 200);
+});
+
+test('sorteia todos ou só os participantes selecionados em uma única chamada autenticada', async () => {
+  const result = { draw: { id: fixture.id, number: 1 }, matches: [{ ...fixture, played_on: null, home_score: null, away_score: null }] };
+  for (const selection of [{}, { team_ids: [club.id, fixture.away_id] }]) {
+    const handler = createHandler({ env, fetchImpl: async (target, options) => {
+      assert.equal(new URL(target).pathname, '/rest/v1/rpc/futtable_draw');
+      assert.equal(options.headers.Authorization, headers.authorization);
+      assert.deepEqual(JSON.parse(options.body), { request_id: fixture.id, ...selection });
+      return Response.json(result);
+    } });
+    const response = await call(handler, '/api/draws', { method: 'POST', body: JSON.stringify({ id: fixture.id, ...selection }) });
+    assert.equal(response.status, 201);
+    assert.deepEqual(response.body, result);
+  }
+
+  const handler = createHandler({ env, fetchImpl: offline });
+  for (const input of [{ id: 'x' }, { id: fixture.id, team_ids: [club.id] }, { id: fixture.id, team_ids: [club.id, club.id] }, { id: fixture.id, team_ids: [null, club.id] }]) {
+    assert.equal((await call(handler, '/api/draws', { method: 'POST', body: JSON.stringify(input) })).status, 400);
+  }
+});
+
+test('registra resultado em jogo pendente validando a data, os gols e o id', async () => {
+  const { home_score, away_score, played_on } = fixture;
+  const result = data => ({ method: 'POST', body: JSON.stringify(data) });
+  const handler = createHandler({ env, fetchImpl: async (target, options) => {
+    assert.equal(new URL(target).pathname, '/rest/v1/rpc/futtable_finish_match');
+    assert.deepEqual(JSON.parse(options.body), { match_id: fixture.id, goals_home: 0, goals_away: 2, game_date: played_on });
+    return Response.json(fixture);
+  } });
+  const path = '/api/matches/' + fixture.id + '/result';
+  assert.deepEqual((await call(handler, path, result({ home_score, away_score, played_on }))).body, fixture);
+  assert.equal((await call(handler, path, result({ home_score, away_score, played_on: '2027-02-29' }))).status, 400);
+  assert.equal((await call(handler, path, result({ home_score: null, away_score, played_on }))).status, 400);
+});
+
+test('preserva conflitos de participantes e rodadas devolvidos pelo banco', async () => {
+  const message = 'Atualize a seleção de jogadores.';
+  const handler = createHandler({ env, fetchImpl: async () => Response.json({ code: 'PT409', message }, { status: 409 }) });
+  const response = await call(handler, '/api/draws', { method: 'POST', body: JSON.stringify({ id: fixture.id }) });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error, message);
+});

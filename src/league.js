@@ -18,11 +18,26 @@ function countResult(row, scored, conceded) {
   if (row.form.length > 5) row.form.shift();
 }
 
+export function isPlayed(match) {
+  return Number.isInteger(match.home_score) && Number.isInteger(match.away_score) && Boolean(match.played_on);
+}
+
+export function matchTeam(match, side, teamsById) {
+  const team = teamsById.get(match[side + '_id']);
+  if (!team || !match.draw_id) return team;
+  return {
+    ...team,
+    name: match[side + '_team_name'] ?? team.name,
+    player_name: match[side + '_player_name'] ?? team.player_name,
+    catalog_id: match[side + '_team_name'] ? match[side + '_catalog_id'] : team.catalog_id,
+  };
+}
+
 export function standings(league) {
   const rows = new Map(league.teams.map(team => [team.id, {
     team, points: 0, played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, gd: 0, form: [],
   }]));
-  const byDate = [...league.matches].sort((a, b) => a.played_on.localeCompare(b.played_on) || a.id.localeCompare(b.id));
+  const byDate = league.matches.filter(isPlayed).sort((a, b) => a.played_on.localeCompare(b.played_on) || a.id.localeCompare(b.id));
   for (const match of byDate) {
     const home = rows.get(match.home_id);
     const away = rows.get(match.away_id);
@@ -36,7 +51,7 @@ export function standings(league) {
   );
 }
 
-function recordId(id) {
+export function recordId(id) {
   if (id === undefined) {
     if (crypto.randomUUID) return crypto.randomUUID();
     const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -57,7 +72,12 @@ export function prepareTeam(input) {
   if ([...name].length < 2 || [...name].length > 60) throw new Error('Use entre 2 e 60 caracteres no nome do clube.');
   if (!/^[A-Z0-9]{2,4}$/.test(code)) throw new Error('Use de 2 a 4 letras ou números na sigla.');
   if (typeof input.color !== 'string' || !/^#[\da-f]{6}$/i.test(input.color)) throw new Error('Escolha uma cor válida para o clube.');
-  return { id: recordId(input.id), name, code, color: input.color };
+  if (input.player_name != null && typeof input.player_name !== 'string') throw new Error('Informe um nome de jogador válido.');
+  const player = input.player_name?.trim().replace(/\s+/gu, ' ') || null;
+  if (player && ([...player].length > 60 || /[\u0000-\u001f\u007f]/u.test(player))) {
+    throw new Error('Use até 60 caracteres no nome do jogador.');
+  }
+  return { id: recordId(input.id), name, code, color: input.color, player_name: player, catalog_id: input.catalog_id || null };
 }
 
 export function replaceTeam(league, team) {
@@ -67,7 +87,17 @@ export function replaceTeam(league, team) {
 export function withoutTeam(league, id) {
   if (!league.teams.some(team => team.id === id)) return league;
   const matches = league.matches.filter(match => match.home_id !== id && match.away_id !== id);
-  return { teams: league.teams.filter(team => team.id !== id), matches };
+  return {
+    ...league,
+    teams: league.teams.filter(team => team.id !== id),
+    matches,
+    draws: (league.draws ?? []).map(draw => draw.bye_team_id === id ? { ...draw, bye_team_id: null } : draw),
+  };
+}
+
+export function today() {
+  const date = new Date();
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 
 function score(value) {

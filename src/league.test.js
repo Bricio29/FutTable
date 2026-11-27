@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { standings, prepareTeam, prepareMatch, replaceTeam, withoutTeam } from './league.js';
+import { standings, isPlayed, matchTeam, prepareTeam, prepareMatch, replaceTeam, withoutTeam } from './league.js';
 
 const clubs = [
   ['Aurora FC', 'AUR', '#166D54'],
@@ -82,13 +82,30 @@ test('classificação de quatro rodadas preserva todos os confrontos', () => {
 });
 
 test('normaliza cadastro e valida data e placar inclusive zero', () => {
-  assert.deepEqual(prepareTeam({ ...a, name: ' Aurora   FC ', code: 'aur' }), a);
+  assert.deepEqual(prepareTeam({ ...a, name: ' Aurora   FC ', code: 'aur' }), { ...a, player_name: null, catalog_id: null });
+  assert.equal(prepareTeam({ ...a, player_name: '  Nina    Silva ' }).player_name, 'Nina Silva');
   assert.throws(() => prepareTeam({ ...a, code: 'inválida' }));
   const match = sampleLeague.matches[0];
   assert.throws(() => prepareMatch({ ...match, home_id: match.away_id }));
   for (const home_score of [NaN, 100, -1, 1.5, '', null]) assert.throws(() => prepareMatch({ ...match, home_score }));
   assert.throws(() => prepareMatch({ ...match, played_on: '2026-02-29' }));
   assert.equal(prepareMatch({ ...match, home_score: '0', played_on: '2024-02-29' }).home_score, 0);
+});
+
+test('partidas sorteadas só contam depois de receber um placar, inclusive 0 × 0', () => {
+  const drawn = { ...fixture(a, b, null, null), draw_id: 'rodada', played_on: null };
+  const played = { ...drawn, id: 'final', home_score: 0, away_score: 0, played_on: '2026-11-27' };
+  const league = { teams: [a,b], matches: [played, drawn] };
+  assert.equal(isPlayed(drawn), false);
+  assert.equal(isPlayed(played), true);
+  assert.deepEqual(standings(league).map(row => [row.played, row.points]), [[1,1],[1,1]]);
+});
+
+test('a ficha da partida sorteada preserva os jogadores e os clubes escolhidos na rodada', () => {
+  const drawn = { home_id: a.id, draw_id: 'rodada', home_player_name: 'Ana', home_team_name: 'Real Madrid', home_catalog_id: 'real-madrid' };
+  const byId = new Map([[a.id, { ...a, player_name: 'João', catalog_id: null }]]);
+  const team = matchTeam(drawn, 'home', byId);
+  assert.deepEqual([team.name, team.player_name, team.catalog_id], ['Real Madrid','Ana','real-madrid']);
 });
 
 test('editar um clube atualiza o nome na classificação e preserva o histórico', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
-import { prepareMatch, prepareTeam, replaceTeam, withoutTeam } from './league.js';
+import { prepareMatch, prepareTeam, recordId, replaceTeam, withoutTeam } from './league.js';
 
-const empty = { teams: [], matches: [] };
+const empty = { teams: [], matches: [], draws: [] };
 
 async function request(token, path, method = 'GET', body) {
   let response;
@@ -45,14 +45,14 @@ function createLeagueStore(token) {
     return operation;
   }
 
-  async function refresh() {
-    update({ loading: true, error: null });
+  async function refresh(showLoading = true) {
+    if (showLoading) update({ loading: true, error: null });
     try {
       const league = await request(token, 'league');
       if (!Array.isArray(league.teams) || !Array.isArray(league.matches)) {
         throw new Error('O servidor retornou dados da liga incompletos.');
       }
-      update({ league, loading: false });
+      update({ league: { ...league, draws: league.draws ?? [] }, loading: false, error: null });
     } catch (error) {
       update({ loading: false, error: error.message });
     }
@@ -91,7 +91,7 @@ function createLeagueStore(token) {
       try {
         return await action();
       } catch (error) {
-        if (error.status === 404 || error.status === 409) await refresh();
+        if (error.status === 404 || error.status === 409) await refresh(false);
         throw error;
       }
     });
@@ -103,7 +103,9 @@ function createLeagueStore(token) {
       const next = prepareTeam({ ...draft, id: previous.id });
       const saved = await request(token, 'teams/' + previous.id, 'PATCH', {
         name: next.name, code: next.code, color: next.color,
+        catalog_id: next.catalog_id, player_name: next.player_name,
         previous_name: previous.name, previous_code: previous.code, previous_color: previous.color,
+        previous_catalog_id: previous.catalog_id, previous_player_name: previous.player_name,
       });
       update({ league: replaceTeam(state.league, saved) });
       return saved;
@@ -133,6 +135,36 @@ function createLeagueStore(token) {
     });
   }
 
+  function drawRound(teamIds) {
+    return editAndRefreshOnConflict(async () => {
+      const ids = [...teamIds].sort();
+      const fingerprint = ids.join(',');
+      const attempt = pending.get('draw');
+      const id = attempt?.fingerprint === fingerprint ? attempt.id : recordId();
+      pending.set('draw', { id, fingerprint });
+      // Se a resposta se perder, repetir o mesmo pedido recupera a rodada já salva.
+      const { draw, matches } = await request(token, 'draws', 'POST', { id, team_ids: ids });
+      pending.delete('draw');
+      const league = state.league;
+      update({ league: {
+        ...league,
+        draws: [...league.draws.filter(row => row.id !== draw.id), draw],
+        matches: [...league.matches.filter(match => match.draw_id !== draw.id), ...matches],
+      } });
+      return draw;
+    });
+  }
+
+  function finishMatch(match, fields) {
+    return editAndRefreshOnConflict(async () => {
+      const { home_score, away_score, played_on } = prepareMatch({ ...match, ...fields });
+      const saved = await request(token, 'matches/' + match.id + '/result', 'POST', { home_score, away_score, played_on });
+      const matches = state.league.matches.map(row => row.id === saved.id ? saved : row);
+      update({ league: { ...state.league, matches } });
+      return saved;
+    });
+  }
+
   return {
     snapshot: () => state,
     subscribe(listener) {
@@ -152,6 +184,8 @@ function createLeagueStore(token) {
     removeTeam,
     addMatch: draft => add('matches', draft),
     updateScore,
+    drawRound,
+    finishMatch,
     removeMatch,
   };
 }
@@ -162,6 +196,6 @@ export function useLeague(accessToken) {
   useEffect(() => store.start(), [store]);
   return {
     ...state, reload: store.reload, addTeam: store.addTeam, updateTeam: store.updateTeam, removeTeam: store.removeTeam, addMatch: store.addMatch,
-    updateScore: store.updateScore, removeMatch: store.removeMatch,
+    updateScore: store.updateScore, removeMatch: store.removeMatch, drawRound: store.drawRound, finishMatch: store.finishMatch,
   };
 }
