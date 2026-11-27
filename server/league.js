@@ -59,23 +59,34 @@ export function validateRecord(table, data) {
   return { id, home_id, away_id, home_score: data.home_score, away_score: data.away_score, played_on: day };
 }
 
+function isLegacyAnonKey(key) {
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key)) return false;
+  try {
+    // Decide se a chave configurada pode ser enviada ao navegador. O gateway verifica a assinatura.
+    const payload = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString('utf8'));
+    return payload.role === 'anon' && !payload.sub;
+  } catch {
+    return false;
+  }
+}
+
 export function publicConfig(env) {
-  const rawUrl = env.SUPABASE_URL?.trim();
-  const key = env.SUPABASE_PUBLISHABLE_KEY?.trim();
+  const rawUrl = env.SUPABASE_URL?.trim() || env.SUPABASE_PUBLIC_URL?.trim();
+  const key = env.SUPABASE_PUBLISHABLE_KEY?.trim() || env.SUPABASE_ANON_KEY?.trim() || env.ANON_KEY?.trim();
   if (!rawUrl && !key) return { url: null, key: null };
   let url;
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new Error('Configure SUPABASE_URL com a URL do projeto.');
+    throw new Error('Configure SUPABASE_URL ou SUPABASE_PUBLIC_URL com a URL pública da API do Supabase.');
   }
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   if (url.username || url.password || url.search || url.hash || url.pathname !== '/' ||
       (url.protocol !== 'https:' && !(local && url.protocol === 'http:'))) {
     throw new Error('SUPABASE_URL precisa apontar para a origem HTTPS do projeto ou para o Supabase local.');
   }
-  if (!key?.startsWith('sb_publishable_')) {
-    throw new Error('Configure SUPABASE_PUBLISHABLE_KEY com uma chave publicável sb_publishable_.');
+  if (!key || !(key.startsWith('sb_publishable_') || isLegacyAnonKey(key))) {
+    throw new Error('Use a chave publicável do Supabase ou a ANON_KEY legada com papel anon.');
   }
   return { url: url.origin, key };
 }

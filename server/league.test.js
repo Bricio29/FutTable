@@ -47,6 +47,36 @@ test('configuração pública e autenticação obrigatória', async () => {
   assert.throws(() => createHandler({ env: { ...env, SUPABASE_PUBLISHABLE_KEY: 'sb_secret_exemplo' } }));
 });
 
+function exampleKey(role) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ role })).toString('base64url');
+  return [header, payload, 'assinatura-de-teste'].join('.');
+}
+
+test('configuração auto-hospedada expõe a chave anon e encaminha o token da conta', async () => {
+  const key = exampleKey('anon');
+  const url = 'https://gateway.example';
+  for (const name of ['ANON_KEY', 'SUPABASE_ANON_KEY']) {
+    const handler = createHandler({
+      env: { SUPABASE_PUBLIC_URL: url + '/', [name]: key },
+      fetchImpl: async (target, init) => {
+        assert.equal(target, url + '/rest/v1/rpc/futtable_league');
+        assert.equal(init.headers.apikey, key);
+        assert.equal(init.headers.Authorization, headers.authorization);
+        return Response.json({ teams: [], matches: [] });
+      },
+    });
+    assert.deepEqual((await call(handler, '/api/config')).body, { url, key });
+    assert.equal((await call(handler, '/api/league')).status, 200);
+  }
+});
+
+test('rejeita chaves administrativas, tokens de conta e chaves legadas inválidas', () => {
+  for (const key of [exampleKey('service_role'), exampleKey('authenticated'), 'sb_secret_teste', 'mal.formado.aqui']) {
+    assert.throws(() => createHandler({ env: { SUPABASE_URL: env.SUPABASE_URL, ANON_KEY: key } }), /chave publicável/);
+  }
+});
+
 test('uma única leitura encaminha o token da sessão e a chave pública', async () => {
   const league = { teams: [club], matches: [fixture] };
   const handler = createHandler({ env, fetchImpl: async (url, init) => {

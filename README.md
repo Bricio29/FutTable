@@ -15,6 +15,8 @@ Abra `http://localhost:5173`. O comando inicia a interface e a API. A demonstra�
 
 ## Ativar as contas e o banco
 
+Para uma instalação própria do Supabase pelo Easypanel, siga a seção [Supabase no Easypanel](#supabase-no-easypanel). Os passos a seguir usam o painel do serviço hospedado pela Supabase.
+
 1. Em um projeto Supabase, abra o SQL Editor e execute o arquivo [202611270001_league.sql](supabase/migrations/202611270001_league.sql) uma vez. Ele cria as tabelas, as regras de acesso por conta e a consulta da liga.
 2. Em **Authentication**, habilite o provedor **Email** e o cadastro de usuários. Para exigir confirmação, habilite **Confirm email**. Em **URL Configuration**, defina a **Site URL** e adicione `http://localhost:5173/` às **Redirect URLs** durante o desenvolvimento. Ao publicar, configure também o endereço HTTPS da aplicação. [Guia de login por senha e recuperação](https://supabase.com/docs/guides/auth/passwords)
 3. Copie o modelo de ambiente e preencha as duas variáveis com a **Project URL** e a **Publishable key** (`sb_publishable_…`) do painel do projeto. A chave publicável é enviada ao navegador. O token de cada usuário identifica sua liga nas operações da API.
@@ -53,8 +55,17 @@ O processo Node serve os arquivos de `dist/` e as rotas `/api` na porta `PORT` (
 
 1. Crie um serviço **App** e conecte a origem GitHub ao repositório `Bricio29/FutTable`, branch `main`.
 2. Selecione o método de build **Dockerfile**, com contexto na raiz do repositório (`.`) e caminho `Dockerfile`. A imagem executa os testes, compila o React e inicia o servidor Node.
-3. Em **Environment**, defina `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` para o projeto em que aplicou a migração. Com as duas variáveis vazias, o app abre em demonstração local.
-4. Em **Domains**, encaminhe o domínio HTTPS para a porta interna `3001` e faça o deploy. Registre esse endereço no Supabase conforme a seção **Ativar as contas e o banco**.
+3. Em **Environment**, configure a URL e a chave pública da sua instalação do Supabase. Com a configuração vazia, o app abre em demonstração local.
+4. Em **Domains**, encaminhe o domínio HTTPS para a porta interna `3001` e faça o deploy. Se a interface estiver na Vercel, encaminhe as chamadas `/api/:path*` desse site para `https://DOMINIO-DO-FUTTABLE-NO-EASYPANEL/api/:path*`.
+
+### Supabase no Easypanel
+
+1. Em **Supabase → Environment**, localize `SUPABASE_PUBLIC_URL`. Ela deve conter a origem HTTPS pública do gateway Kong, por exemplo `https://supabase.exemplo.com`. Se o valor ainda for local, confira em **Domains** o domínio direcionado a `kong` (porta interna `8000` no template oficial). Localize também a chave pública de cliente: `SUPABASE_PUBLISHABLE_KEY` ou, nas instalações com chaves legadas, `ANON_KEY`.
+2. Em **FutTable → Environment**, copie `SUPABASE_PUBLIC_URL` e a chave pública escolhida, com os mesmos nomes. A API entrega esses valores ao navegador e mantém o token do usuário nas operações da liga.
+3. No serviço Supabase, configure `SITE_URL` com o endereço público da interface e inclua a raiz HTTPS da interface em `ADDITIONAL_REDIRECT_URLS`. Em uma instalação compartilhada, preserve a URL padrão e acrescente o novo endereço à lista existente, separado por vírgula. Aplique o deploy dos serviços cujas variáveis foram alteradas.
+4. Execute a [migração](supabase/migrations/202611270001_league.sql) uma vez no SQL Editor do Studio. Abra `/api/config` pelo domínio do FutTable para conferir a URL e a chave pública, depois entre em uma conta e salve uma partida para testar a conexão ao banco.
+
+[Template do Supabase para Easypanel](https://easypanel.io/templates/supabase) · [Chaves de cliente no Supabase auto-hospedado](https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys)
 
 ## Validação
 
