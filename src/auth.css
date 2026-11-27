@@ -1,0 +1,54 @@
+.auth-dialog {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  padding: 34px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  background: #fff;
+  color: #16362e;
+  border: 1px solid #d3dfd8;
+  border-top: 4px solid #15845b;
+  border-radius: 18px;
+  box-shadow: 0 25px 90px #102f283d;
+  font-family: inherit;
+}
+.auth-dialog::backdrop { background: rgb(12 35 29 / 55%); backdrop-filter: blur(3px); }
+.auth-dialog h2 { margin: 0 28px 22px 0; font-size: 1.5rem; line-height: 1.2; letter-spacing: -.035em; }
+.auth-dialog button, .auth-dialog input { font: inherit; }
+.auth-dialog button { cursor: pointer; }
+.auth-dialog button:disabled { cursor: wait; opacity: .65; }
+.auth-dialog :focus-visible { outline: 3px solid #20835d; outline-offset: 3px; }
+.auth-close {
+  position: absolute;
+  inset: 18px 16px auto auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f0f5f2;
+  color: #294a3e;
+  font-size: 23px !important;
+}
+.auth-dialog form, .auth-actions { display: grid; gap: 14px; }
+.auth-dialog label { display: grid; gap: 7px; font-size: .88rem; font-weight: 650; }
+.auth-dialog input { border: 1px solid #becfc6; border-radius: 8px; min-height: 44px; padding: 9px 12px; width: 100%; box-sizing: border-box; color: #17392c; background: white; }
+.auth-dialog input::placeholder { color: #586d62; font-weight: 400; }
+.auth-copy, .auth-error, .auth-switch { font-size: .92rem; line-height: 1.5; overflow-wrap: anywhere; }
+.auth-copy { color: #486256; margin: 0 0 16px; }
+.auth-actions .auth-copy, .auth-dialog form .auth-copy { margin: 0; }
+.auth-error { background: #fff2ef; color: #923822; border-radius: 8px; padding: 10px 12px; margin: 0; }
+.auth-dialog .auth-primary, .auth-dialog .auth-secondary { width: 100%; min-height: 44px; padding: 10px 15px; border-radius: 9px; font-weight: 700; }
+.auth-primary { background: #126a48; border: 1px solid #126a48; color: white; }
+.auth-primary:hover { background: #0e583b; }
+.auth-secondary { background: white; color: #19563b; border: 1px solid #c4d7cb; }
+.auth-secondary + .auth-primary { margin-top: 10px; }
+.auth-link { color: #126a48; border: none; padding: 3px 0; background: transparent; font-weight: 650 !important; }
+.auth-link:hover { text-decoration: underline; }
+.auth-forgot { justify-self: end; font-size: .85rem !important; }
+.auth-switch, .auth-back { margin: 17px 0 0; }
+.auth-switch { text-align: center; }
+@media (max-width: 430px) { .auth-dialog { padding: 26px 22px; } }
